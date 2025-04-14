@@ -478,6 +478,49 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
     }
   };
 
+  // Preload first song and BTR map assets after unmuting
+  useEffect(() => {
+    if (!isMuted && isIntroVideo) {
+      console.log('🎵 Preloading first song assets and BTR map');
+      
+      // Preload first song (CORAZON VENEZOLANO)
+      const preloadFirstSong = () => {
+        // Preload audio
+        const audio = new Audio('/audio/music/CORAZON VENEZOLANO.ogg');
+        audio.preload = 'auto';
+        audio.load();
+        
+        // Preload thumbnail
+        const img = new Image();
+        img.src = '/audio/music/coverart/CORAZON VENEZOLANO.webp';
+        
+        // Store references to prevent garbage collection
+        (window as any).__preloadedSongAssets = {
+          audio,
+          img
+        };
+      };
+      
+      // Preload BTR map assets
+      const preloadBTRMap = () => {
+        // Preload map image
+        const mapImg = new Image();
+        mapImg.src = '/images/map.webp';
+        
+        // Store reference to prevent garbage collection
+        (window as any).__preloadedBTRMap = {
+          mapImg
+        };
+      };
+      
+      // Execute preloading
+      preloadFirstSong();
+      preloadBTRMap();
+      
+      console.log('🎵 Preloading complete for first song and BTR map');
+    }
+  }, [isMuted, isIntroVideo]);
+
   return (
     <div className="loading-screen" style={{ pointerEvents: 'auto' }}>
       <video
