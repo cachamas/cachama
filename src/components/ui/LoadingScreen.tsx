@@ -32,6 +32,8 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
   const loadStartTime = useRef<number | null>(null);
   const [showIOSContinue, setShowIOSContinue] = useState(false);
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+  const [isVideoReady, setIsVideoReady] = useState(false);
+  const [showLoadingGif, setShowLoadingGif] = useState(true);
 
   // Set up loading manager
   useEffect(() => {
@@ -246,6 +248,23 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
       };
     }
   }, [pauseMusic, playMusic, isIntroVideo, isLoading]);
+
+  // Add this new useEffect to handle video readiness
+  useEffect(() => {
+    if (videoRef.current) {
+      const handleCanPlay = () => {
+        setIsVideoReady(true);
+        setShowLoadingGif(false);
+      };
+
+      videoRef.current.addEventListener('canplay', handleCanPlay);
+      return () => {
+        if (videoRef.current) {
+          videoRef.current.removeEventListener('canplay', handleCanPlay);
+        }
+      };
+    }
+  }, []);
 
   // Add this new useEffect to handle video display
   useEffect(() => {
@@ -523,6 +542,11 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
 
   return (
     <div className="loading-screen" style={{ pointerEvents: 'auto' }}>
+      {showLoadingGif && (
+        <div className="absolute inset-0 flex items-center justify-center z-50">
+          <img src="/images/vv.gif" alt="Loading..." className="max-w-[200px] h-auto" />
+        </div>
+      )}
       <video
         ref={videoRef}
         src={`/videos/${videoSrc}`}
@@ -533,8 +557,8 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
         preload="auto"
         style={{ 
           pointerEvents: 'none',
-          opacity: 1,
-          visibility: 'visible',
+          opacity: isVideoReady ? 1 : 0,
+          visibility: isVideoReady ? 'visible' : 'hidden',
           objectFit: 'cover',
           width: '100%',
           height: '100%'
