@@ -17,6 +17,7 @@ import { LoadingScreen } from './components/ui/LoadingScreen';
 import { useLoadingStore } from './stores/loadingStore';
 import { useDebugStore } from './stores/debugStore';
 import { applyBrowserOptimizations } from './lib/browserOptimizations';
+import { useMapStore } from './lib/mapStore';
 
 // Game components
 import Player from './components/game/Player';
@@ -30,6 +31,7 @@ import MobileControls from './components/ui/MobileControls';
 import { useMobileControls } from './hooks/useMobileControls';
 import { MobileControlsDebugger } from './components/ui/MobileControlsDebugger';
 import MobileToriSlideshow from './components/ui/MobileToriSlideshow';
+import MobileMapSlideshow from './components/ui/MobileMapSlideshow';
 
 // Fragment shader
 const fragmentShader = `
@@ -184,6 +186,7 @@ export default function App() {
   const [lookX, setLookX] = useState(0);
   const [lookY, setLookY] = useState(0);
   const [actionLog, setActionLog] = useState<string[]>([]);
+  const { currentMap } = useMapStore();
   
   // Basic mobile detection and map handling
   useEffect(() => {
@@ -197,6 +200,12 @@ export default function App() {
       document.body.style.position = 'fixed';
       document.body.style.overflow = 'hidden';
       document.body.style.touchAction = 'none';
+      
+      // Add data attribute to body to help with mobile detection
+      document.body.setAttribute('data-is-mobile', 'true');
+      
+      console.log('📱 Mobile device detected - setting up mobile environment');
+      // Rest of existing code...
       
       // Set mobile flag
       document.body.setAttribute('data-is-mobile', 'true');
@@ -822,6 +831,12 @@ export default function App() {
         
         {/* Always render MobileToriSlideshow at the very end so it always appears on top */}
         <MobileToriSlideshow />
+        {/* Use MobileMapSlideshow for all non-toris, non-central maps */}
+        <div className="fixed inset-0 z-[999999] pointer-events-none">
+          <div className="pointer-events-auto">
+            <MobileMapSlideshow key={`map-slideshow-${currentMap}`} />
+          </div>
+        </div>
         <MobileControlsDebugger />
       </div>
     </>

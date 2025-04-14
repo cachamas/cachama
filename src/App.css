@@ -466,3 +466,51 @@ canvas {
   color: #ff0000;
   font-weight: bold;
 }
+
+/* Map slideshow toggle button (magnifying glass) */
+.map-slideshow-toggle {
+  position: fixed !important;
+  top: 20px !important;
+  right: 20px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 56px !important;
+  height: 56px !important;
+  background-color: rgba(0, 0, 0, 0.8) !important;
+  border: 2px solid rgba(255, 255, 255, 0.5) !important;
+  border-radius: 50% !important;
+  z-index: 999999 !important; /* Increased z-index */
+  pointer-events: auto !important;
+  touch-action: manipulation !important;
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.6) !important;
+  opacity: 1 !important;
+  transform-origin: center !important;
+  transition: transform 0.2s ease !important;
+  /* Force visibility */
+  visibility: visible !important;
+  display: flex !important;
+}
+
+.map-slideshow-toggle:active {
+  transform: scale(0.95) !important;
+  background-color: rgba(0, 0, 0, 0.9) !important;
+}
+
+.map-slideshow-toggle svg {
+  width: 32px !important;
+  height: 32px !important;
+  stroke: white !important;
+  stroke-width: 2 !important;
+}
+
+/* Ensure the button container is also visible */
+.map-slideshow-toggle-container {
+  position: fixed !important;
+  top: 20px !important;
+  right: 20px !important;
+  z-index: 999999 !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+  display: block !important;
+}

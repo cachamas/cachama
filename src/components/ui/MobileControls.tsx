@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useCallback, useState } from 'react';
 import nipplejs, { JoystickManager, JoystickOutputData } from 'nipplejs';
 import { useInteractionStore } from '@/stores/interactionStore';
 import { useLoadingStore } from '@/stores/loadingStore';
+import { useMapStore } from '@/stores/mapStore';
 
 // Add debug logging utility
 const DEBUG = true;
@@ -64,6 +65,12 @@ const MobileControls: React.FC<MobileControlsProps> = ({
   const [isInitialized, setIsInitialized] = useState(false);
   const { isPhysicsReady, isMapFullyReady } = useLoadingStore();
   const [isMobile, setIsMobile] = useState(false);
+  const [isGCTGalleryOpen, setIsGCTGalleryOpen] = useState(false);
+  const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  
+  // The toris effect should be global for all mobile UI elements
+  const { currentMap } = useMapStore();
+  const isTorisMap = currentMap === 'toris';
   
   // Add resilience tracking
   const [joystickError, setJoystickError] = useState<string | null>(null);
@@ -105,8 +112,11 @@ const MobileControls: React.FC<MobileControlsProps> = ({
   const TAP_THRESHOLD = 300;
   const MOVE_THRESHOLD = 10;
 
-  // Get the hovered object from the interaction store
+  // Get interaction store functions
   const hoveredObject = useInteractionStore(state => state.hoveredObject);
+  
+  // Add iOS detection
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
   
   // Cleanup function for joystick
   const cleanupJoystick = useCallback(() => {
@@ -136,11 +146,23 @@ const MobileControls: React.FC<MobileControlsProps> = ({
       onLook({ x: 0, y: 0 });
     };
 
+    // Track map changes for logging
+    const handleMapChange = (e: CustomEvent) => {
+      const mapName = e.detail?.map || (window as any).currentMap || '';
+      
+      // Reset controls
+      cleanup();
+      
+      debugLog('MobileControls', `Map changed to: ${mapName}, isToris: ${mapName === 'toris'}`);
+    };
+
     // Listen for map changes
     window.addEventListener('map-change', cleanup);
+    window.addEventListener('map-changed', handleMapChange as EventListener);
     
     return () => {
       window.removeEventListener('map-change', cleanup);
+      window.removeEventListener('map-changed', handleMapChange as EventListener);
       cleanup();
     };
   }, [onMove, onLook]);
@@ -226,18 +248,23 @@ const MobileControls: React.FC<MobileControlsProps> = ({
 
   // Initialize joystick with resilience
   useEffect(() => {
-    if (isMobile || window.__hasMobileControls__) {
-      // Initialize immediately
+    if ((isMobile || window.__hasMobileControls__) && !isTorisMap) {
+      // Only initialize if NOT in Toris map
       const success = initializeJoystick();
       
       // Set up periodic check for joystick responsiveness
       const healthCheckInterval = setInterval(() => {
+        // Skip health checks if in Toris map
+        if (isTorisMap) {
+          return;
+        }
+        
         const now = Date.now();
         const elapsedTime = now - lastJoystickActivity.current;
         
         // Detect current map - heavy maps need more frequent checks
         const currentMap = (window as any).currentMap || '';
-        const isHeavyMap = ['gct', 'toris', 'overworld', 'central'].includes(currentMap);
+        const isHeavyMap = ['gct', 'overworld', 'central'].includes(currentMap);
         const timeThreshold = isHeavyMap ? 3000 : 5000;
         
         // If joystick hasn't reported activity in a while and we've interacted with the game,
@@ -258,52 +285,77 @@ const MobileControls: React.FC<MobileControlsProps> = ({
         clearInterval(healthCheckInterval);
         cleanupJoystick();
       };
+    } else if (isTorisMap) {
+      // If in Toris map, ensure controls are disabled
+      cleanupJoystick();
+      onMove({ x: 0, y: 0 });
+      onLook({ x: 0, y: 0 });
     }
     
     // No cleanup needed if not mobile
     return undefined;
-  }, [isMobile, initializeJoystick, onMove, cleanupJoystick]);
+  }, [isMobile, initializeJoystick, onMove, onLook, cleanupJoystick, isTorisMap]);
 
-  // Handle direct control reset requests
+  // Handle reset controls event
   useEffect(() => {
     const handleResetControls = () => {
-      debugLog('MobileControls', 'Resetting controls due to reset event');
+      if (isTorisMap) {
+        // In Toris map, just ensure controls are disabled
+        cleanupJoystick();
+        onMove({ x: 0, y: 0 });
+        onLook({ x: 0, y: 0 });
+        return;
+      }
       
-      // Reset touch tracking refs
+      // Rest of existing reset code
+      debugLog('MobileControls', 'Reset controls event received');
+      
+      // Reset movement
+      onMove({ x: 0, y: 0 });
+      onLook({ x: 0, y: 0 });
+      
+      // Reset refs
       touchStartRef.current = null;
       lastTouchRef.current = null;
       isLookingRef.current = false;
       hasMoveRef.current = false;
       
-      // Reset input values
-      onMove({ x: 0, y: 0 });
-      onLook({ x: 0, y: 0 });
-      
-      // Reinitialize joystick if needed
-      if (joystickError || !moveManagerRef.current) {
+      // Reinitialize joystick with fresh state
+      if (isMobile || window.__hasMobileControls__) {
         initializeJoystick();
       }
+      
+      // Make UI visible again if it was hidden
+      setIsUIVisible(true);
     };
     
     window.addEventListener('reset-controls', handleResetControls);
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
-        handleResetControls();
-      }
-    });
     
     return () => {
       window.removeEventListener('reset-controls', handleResetControls);
-      document.removeEventListener('visibilitychange', handleResetControls);
     };
-  }, [onMove, onLook, initializeJoystick, joystickError]);
+  }, [initializeJoystick, onMove, onLook, cleanupJoystick, isTorisMap]);
 
   // Handle interaction visibility only
   useEffect(() => {
-    const handleInteractionOpen = () => setIsUIVisible(false);
+    const handleInteractionOpen = () => {
+      // Check if this is in the GCT map
+      const currentMap = (window as any).currentMap || '';
+      const isGCTMap = currentMap === 'gct';
+      
+      // If in GCT map and object info is open, it's the gallery
+      if (isGCTMap && document.querySelector('[data-selected-object]')) {
+        console.log('GCT Gallery opened, hiding mobile controls');
+        setIsGCTGalleryOpen(true);
+      }
+      
+      setIsUIVisible(false);
+    };
+    
     const handleInteractionClose = () => {
       console.log('Mobile controls: Interactable closed, restoring UI visibility');
       setIsUIVisible(true);
+      setIsGCTGalleryOpen(false);
       
       // Special handling for BTR map
       const wasBTRMap = document.body.hasAttribute('data-map-open') || window.__btrMapOpen;
@@ -333,10 +385,94 @@ const MobileControls: React.FC<MobileControlsProps> = ({
     };
   }, [initializeJoystick, joystickError]);
 
+  // Check for GCT gallery open state
+  useEffect(() => {
+    const checkGalleryState = () => {
+      const currentMap = (window as any).currentMap || '';
+      const isGCTMap = currentMap === 'gct';
+      const isGalleryMap = currentMap === 'gallery';
+      const isAnyGalleryOpen = document.querySelector('[data-selected-object]') !== null;
+      
+      if (isGCTMap && isAnyGalleryOpen) {
+        setIsGCTGalleryOpen(true);
+        setIsUIVisible(false);
+      } else if (isGalleryMap && isAnyGalleryOpen) {
+        setIsGalleryOpen(true);
+        setIsUIVisible(false);
+      }
+    };
+    
+    // Explicit handlers for GCT gallery events
+    const handleGCTGalleryOpened = () => {
+      console.log('Mobile controls: GCT Gallery opened event received');
+      setIsGCTGalleryOpen(true);
+      setIsUIVisible(false);
+    };
+    
+    const handleGCTGalleryClosed = () => {
+      console.log('Mobile controls: GCT Gallery closed event received');
+      // Use setTimeout to ensure we only restore controls after gallery is fully closed
+      setTimeout(() => {
+        setIsGCTGalleryOpen(false);
+        setIsUIVisible(true);
+      }, 300);
+    };
+    
+    // Explicit handlers for Gallery events
+    const handleGalleryOpened = () => {
+      console.log('Mobile controls: Gallery opened event received');
+      setIsGalleryOpen(true);
+      setIsUIVisible(false);
+    };
+    
+    const handleGalleryClosed = () => {
+      console.log('Mobile controls: Gallery closed event received');
+      // Use setTimeout to ensure we only restore controls after gallery is fully closed
+      setTimeout(() => {
+        setIsGalleryOpen(false);
+        setIsUIVisible(true);
+      }, 300);
+    };
+    
+    // Run check on mount
+    checkGalleryState();
+    
+    // Add event listeners for gallery states
+    window.addEventListener('gct-gallery-opened', handleGCTGalleryOpened);
+    window.addEventListener('gct-gallery-closed', handleGCTGalleryClosed);
+    window.addEventListener('gallery-opened', handleGalleryOpened);
+    window.addEventListener('gallery-closed', handleGalleryClosed);
+    
+    // Add event listener for object info changes
+    window.addEventListener('object-info-opened', checkGalleryState);
+    window.addEventListener('object-info-closed', checkGalleryState);
+    
+    // Set up interval to periodically check (as a fallback)
+    const interval = setInterval(checkGalleryState, 1000);
+    
+    return () => {
+      window.removeEventListener('gct-gallery-opened', handleGCTGalleryOpened);
+      window.removeEventListener('gct-gallery-closed', handleGCTGalleryClosed);
+      window.removeEventListener('gallery-opened', handleGalleryOpened);
+      window.removeEventListener('gallery-closed', handleGalleryClosed);
+      window.removeEventListener('object-info-opened', checkGalleryState);
+      window.removeEventListener('object-info-closed', checkGalleryState);
+      clearInterval(interval);
+    };
+  }, []);
+
   // Handle touch events for looking and interaction
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+    // If in Toris map, don't process touch events
+    if (isTorisMap) {
+      return;
+    }
+    
+    // Only prevent default on non-iOS devices
+    if (!isIOS) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     
     // Process all active touches to find one in the look area
     for (let i = 0; i < e.touches.length; i++) {
@@ -363,13 +499,19 @@ const MobileControls: React.FC<MobileControlsProps> = ({
         break;
       }
     }
-  }, []);
+  }, [hoveredObject, isTorisMap, isIOS]);
   
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!isLookingRef.current || !touchStartRef.current || !lastTouchRef.current) return;
+    // If in Toris map or not looking, don't process movement
+    if (isTorisMap || !isLookingRef.current || !touchStartRef.current || !lastTouchRef.current) {
+      return;
+    }
     
-    e.preventDefault();
-    e.stopPropagation();
+    // Only prevent default on non-iOS devices
+    if (!isIOS) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     
     // Process look movement if we're tracking a touch
     if (lastTouchRef.current) {
@@ -399,9 +541,9 @@ const MobileControls: React.FC<MobileControlsProps> = ({
         const moveDeltaX = currentTouch.clientX - lastTouchRef.current.x;
         const moveDeltaY = currentTouch.clientY - lastTouchRef.current.y;
         
-        // Get current map for sensitivity adjustment
+        // Get current map for sensitivity adjustment - not needed for Toris as touch is disabled
         const currentMap = (window as any).currentMap || 'default';
-        const isHeavyMap = ['gct', 'toris'].includes(currentMap);
+        const isHeavyMap = ['gct'].includes(currentMap);
         
         // Use simpler sensitivity calculation for heavy maps
         const screenWidthFactor = isHeavyMap ? 1.0 : window.innerWidth / 1000;
@@ -411,29 +553,33 @@ const MobileControls: React.FC<MobileControlsProps> = ({
         // Apply additional smoothing for heavy maps
         const smoothingFactor = isHeavyMap ? 0.8 : 1.0;
         
-        // Send look data with map-specific adjustments
-        onLook({ 
-          x: moveDeltaX * lookSensitivity * smoothingFactor, 
-          y: moveDeltaY * lookSensitivity * smoothingFactor 
-        });
-
-        // Dispatch mobile-look event for viewmodel movement
-        window.dispatchEvent(new CustomEvent('mobile-look', {
-          detail: { 
-            x: moveDeltaX * lookSensitivity * smoothingFactor,
-            y: moveDeltaY * lookSensitivity * smoothingFactor
-          }
-        }));
+        // Apply camera look with sensitivity scaling
+        const effectiveX = moveDeltaX * lookSensitivity * smoothingFactor;
+        const effectiveY = moveDeltaY * lookSensitivity * smoothingFactor;
         
-        // Update last position
-        lastTouchRef.current = { x: currentTouch.clientX, y: currentTouch.clientY };
+        // Provide look vector to the callback
+        onLook({ x: effectiveX, y: effectiveY });
+        
+        // Update last touch position
+        lastTouchRef.current = {
+          x: currentTouch.clientX,
+          y: currentTouch.clientY
+        };
       }
     }
-  }, [onLook]);
+  }, [onLook, isTorisMap, isIOS]);
   
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+    // If in Toris map, don't process touch end events
+    if (isTorisMap) {
+      return;
+    }
+    
+    // Only prevent default on non-iOS devices
+    if (!isIOS) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     
     // Check if this was a quick tap
     if (touchStartRef.current && !hasMoveRef.current && isLookingRef.current) {
@@ -490,7 +636,7 @@ const MobileControls: React.FC<MobileControlsProps> = ({
       // Stop looking
       onLook({ x: 0, y: 0 });
     }
-  }, [hoveredObject, onLook]);
+  }, [hoveredObject, onLook, isTorisMap, isIOS]);
 
   // Add CSS
   useEffect(() => {
@@ -576,23 +722,27 @@ const MobileControls: React.FC<MobileControlsProps> = ({
     };
   }, []);
   
-  // Prevent default touch actions
+  // Prevent default touch actions - iOS specific handling
   useEffect(() => {
+    // Only add these event listeners if we're on iOS
+    if (!isIOS) return;
+    
     const preventDefault = (e: TouchEvent) => {
       if (e.target instanceof HTMLElement && 
           e.target.closest('.mobile-controls-container')) {
-        e.preventDefault();
+        // For iOS, we don't prevent default to allow native behavior
+        // but we still want to handle the event
       }
     };
     
-    document.addEventListener('touchstart', preventDefault, { passive: false });
-    document.addEventListener('touchmove', preventDefault, { passive: false });
+    document.addEventListener('touchstart', preventDefault, { passive: true });
+    document.addEventListener('touchmove', preventDefault, { passive: true });
     
     return () => {
       document.removeEventListener('touchstart', preventDefault);
       document.removeEventListener('touchmove', preventDefault);
     };
-  }, []);
+  }, [isIOS]);
 
   // Add debug event dispatch
   const dispatchDebugUpdate = useCallback((data: any) => {
@@ -663,23 +813,19 @@ const MobileControls: React.FC<MobileControlsProps> = ({
     });
   }, [onLook, dispatchDebugUpdate]);
 
-  // Modified return statement with debug class
-  return (isMobile || window.__hasMobileControls__) ? (
+  // Only render UI if we're not in Toris map
+  if (isTorisMap) {
+    return null; // Don't render any controls in Toris map
+  }
+
+  return (
     <div 
-      ref={containerRef} 
-      className={`mobile-controls-container debug-mobile-controls ${!isUIVisible ? 'hidden' : ''}`}
-      style={{
-        opacity: isUIVisible ? 1 : 0,
-        pointerEvents: isUIVisible ? 'auto' : 'none'
+      ref={containerRef}
+      className={`fixed inset-0 pointer-events-auto touch-none select-none z-20 ${isUIVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'} transition-opacity duration-300`}
+      style={{ 
+        opacity: (isGCTGalleryOpen || !isUIVisible) ? 0 : 1,
+        pointerEvents: (isGCTGalleryOpen || !isUIVisible) ? 'none' : 'auto'
       }}
-      data-debug-state={JSON.stringify({
-        isUIVisible,
-        isInitialized,
-        isPhysicsReady,
-        isMapFullyReady,
-        isMobile,
-        joystickError
-      })}
     >
       {/* Movement joystick */}
       <div ref={moveJoystickRef} className="joystick-container" />
@@ -694,7 +840,7 @@ const MobileControls: React.FC<MobileControlsProps> = ({
         onTouchCancel={handleTouchEnd}
       />
     </div>
-  ) : null;
+  );
 };
 
 export default MobileControls; 

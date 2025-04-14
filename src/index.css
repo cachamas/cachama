@@ -226,6 +226,32 @@ canvas {
   }
 }
 
+/* iOS-specific touch handling - only applies to iOS devices */
+@supports (-webkit-touch-callout: none) {
+  @media (max-width: 1024px) {
+    * {
+      touch-action: manipulation !important;
+    }
+    
+    .mobile-controls-container {
+      touch-action: manipulation !important;
+      -webkit-touch-callout: none !important;
+    }
+    
+    .look-area {
+      touch-action: manipulation !important;
+      -webkit-touch-callout: none !important;
+    }
+    
+    button, 
+    [role="button"],
+    .interactive {
+      touch-action: manipulation !important;
+      -webkit-touch-callout: none !important;
+    }
+  }
+}
+
 /* Remove outdated mobile controls CSS - now handled in MobileControls.tsx */
 .mobile-controls-container,
 .joystick-container,

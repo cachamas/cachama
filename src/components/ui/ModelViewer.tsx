@@ -5,9 +5,10 @@ import * as THREE from 'three';
 
 interface ModelProps {
   modelPath: string;
+  onLoaded: () => void;
 }
 
-function Model({ modelPath }: ModelProps) {
+function Model({ modelPath, onLoaded }: ModelProps) {
   const { scene } = useGLTF(modelPath);
   const modelRef = useRef<THREE.Group>();
   const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
@@ -18,6 +19,13 @@ function Model({ modelPath }: ModelProps) {
       modelRef.current.rotation.y += delta * 0.5;
     }
   });
+
+  // Call onLoaded when the model is loaded
+  useEffect(() => {
+    if (scene) {
+      onLoaded();
+    }
+  }, [scene, onLoaded]);
 
   const resetPosition = useCallback(() => {
     if (modelRef.current) {
@@ -154,8 +162,21 @@ interface ModelViewerProps {
 }
 
 export default function ModelViewer({ modelPath }: ModelViewerProps) {
+  const [isLoading, setIsLoading] = useState(true);
+
+  const handleModelLoaded = useCallback(() => {
+    setIsLoading(false);
+  }, []);
+
   return (
     <div className="w-full h-[80vh] bg-transparent relative">
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center z-10">
+          <div className="text-4xl font-bold text-white animate-pulse">
+            LOADING...
+          </div>
+        </div>
+      )}
       <Canvas
         camera={{ 
           fov: 40,
@@ -166,7 +187,7 @@ export default function ModelViewer({ modelPath }: ModelViewerProps) {
         style={{ background: 'transparent' }}
       >
         <Lighting />
-        <Model modelPath={modelPath} />
+        <Model modelPath={modelPath} onLoaded={handleModelLoaded} />
         <CameraController />
       </Canvas>
     </div>

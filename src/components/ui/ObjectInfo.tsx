@@ -8,6 +8,7 @@ import ImageViewer from './ImageViewer';
 import { getObjectInfo } from '../../lib/interactionSystem';
 import { useInteractionStore } from '../../stores/interactionStore';
 import { isMobileDevice } from '../../lib/utils';
+import { useMapStore } from '../../lib/mapStore';
 
 // Add global type declaration
 declare global {
@@ -26,6 +27,7 @@ export default function ObjectInfo({ object, onClose }: ObjectInfoProps) {
   const toriInfo = getObjectInfo(object.name);
   const { isForceTorisOpen } = useInteractionStore();
   const [justClosedMap, setJustClosedMap] = useState(false);
+  const { currentMap } = useMapStore();
 
   // Separate handling for GCT meshes vs toris
   const isGCTMesh = object.name.includes('Mesh_');
@@ -267,6 +269,22 @@ export default function ObjectInfo({ object, onClose }: ObjectInfoProps) {
             }
             
             handleClose();
+          } else if (currentMap === 'gct' && (isArtPiece || isTattoo)) {
+            // Special handling for GCT gallery background tap
+            e.preventDefault();
+            e.stopPropagation();
+            
+            console.log('🎨 Closing GCT gallery from background tap');
+            // Signal gallery is closed
+            window.dispatchEvent(new CustomEvent('gct-gallery-closed'));
+            window.dispatchEvent(new CustomEvent('interactable-closed'));
+            
+            // Provide haptic feedback if available on mobile
+            if (navigator.vibrate) {
+              navigator.vibrate([10, 10]);
+            }
+            
+            handleClose();
           } else {
             handleClose();
           }
@@ -275,9 +293,15 @@ export default function ObjectInfo({ object, onClose }: ObjectInfoProps) {
       <div 
         ref={containerRef}
         className={`relative bg-black/40 max-w-4xl w-[95vw] ${heightClass} overflow-hidden flex flex-col`}
+        onClick={(e) => {
+          // Prevent clicks on the content container from bubbling up
+          // This ensures tapping on the content doesn't close the gallery
+          e.stopPropagation();
+        }}
       >
         <div 
           className={`relative flex items-center justify-center ${isMobile && isTori ? 'h-[45vh]' : 'h-[60vh]'}`}
+          onClick={(e) => e.stopPropagation()}
         >
           {isBTR ? (
             <ImageViewer 
@@ -294,7 +318,10 @@ export default function ObjectInfo({ object, onClose }: ObjectInfoProps) {
             <TattooViewer variant={toriInfo.variant || ''} />
           ) : (
             artworkInfo?.previewPath && (
-              <div className="w-full h-full flex items-center justify-center">
+              <div 
+                className="w-full h-full flex items-center justify-center"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <img
                   ref={imageRef}
                   src={artworkInfo.previewPath}
@@ -314,12 +341,16 @@ export default function ObjectInfo({ object, onClose }: ObjectInfoProps) {
                       }
                     });
                   }}
+                  onClick={(e) => e.stopPropagation()}
                 />
               </div>
             )
           )}
         </div>
-        <div className="w-full px-4 flex flex-col justify-center items-start py-6">
+        <div 
+          className="w-full px-4 flex flex-col justify-center items-start py-6"
+          onClick={(e) => e.stopPropagation()}
+        >
           <h2 className="text-2xl font-bold tracking-tight text-white mb-1">
             {info.title}
           </h2>

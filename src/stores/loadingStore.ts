@@ -35,7 +35,48 @@ export const useLoadingStore = create<LoadingState>((set, get) => ({
   
   setLoading: (loading: boolean) => set({ isLoading: loading }),
   setPhysicsReady: (ready: boolean) => set({ isPhysicsReady: ready }),
-  setCurrentVideo: (video: string | null) => set({ currentVideo: video }),
+  setCurrentVideo: (video: string | null) => {
+    // Previous video reference for cleanup
+    const prevVideo = get().currentVideo;
+    
+    // Set the new video
+    set({ currentVideo: video });
+    
+    // If we have a video, preload it immediately
+    if (video) {
+      console.log(`🎥 Preloading video: ${video}`);
+      
+      // Create a temporary video element for preloading
+      const preloadVideo = document.createElement('video');
+      preloadVideo.src = `/videos/${video}`;
+      preloadVideo.preload = 'auto';
+      preloadVideo.muted = true;
+      
+      // Attempt to load and buffer the video quickly
+      preloadVideo.load();
+      
+      // Try to prefetch and buffer the video with high priority
+      if ('fetchPriority' in HTMLVideoElement.prototype) {
+        try {
+          // @ts-ignore - Not all browsers support this
+          preloadVideo.fetchPriority = 'high';
+        } catch (e) {
+          console.warn('Browser does not support fetchPriority');
+        }
+      }
+      
+      // Store reference to prevent garbage collection
+      (window as any).__preloadedCurrentVideo = preloadVideo;
+      
+      // Clean up previous preloaded video if different
+      if (prevVideo && prevVideo !== video) {
+        setTimeout(() => {
+          // Allow time for the new video to be used before cleaning up the old one
+          (window as any).__preloadedPreviousVideo = (window as any).__preloadedCurrentVideo;
+        }, 5000);
+      }
+    }
+  },
   setTexturesLoaded: (loaded: boolean) => set({ texturesLoaded: loaded }),
   setGeometriesLoaded: (loaded: boolean) => set({ geometriesLoaded: loaded }),
   setMapFullyReady: (ready: boolean) => set({ isMapFullyReady: ready }),

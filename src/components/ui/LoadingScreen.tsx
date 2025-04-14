@@ -30,6 +30,8 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
   const loadedItems = useRef(0);
   const totalItems = useRef(0);
   const loadStartTime = useRef<number | null>(null);
+  const [showIOSContinue, setShowIOSContinue] = useState(false);
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
 
   // Set up loading manager
   useEffect(() => {
@@ -138,6 +140,36 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
     }
   }, [isLoading, isIntroVideo]);
 
+  // Preload all map videos when intro video is playing
+  useEffect(() => {
+    if (isIntroVideo) {
+      console.log('🎮 Preloading all map videos during intro');
+      const mapVideos = [
+        'central.mp4',    // Preload central first as it's likely the first one needed
+        'overworld.mp4',
+        'gallery.mp4',
+        'toris.mp4',
+        'music.mp4',
+        'gct.mp4'
+      ];
+      
+      // Create video elements for preloading but don't add to DOM
+      mapVideos.forEach(video => {
+        const preloadVideo = document.createElement('video');
+        preloadVideo.src = `/videos/${video}`;
+        preloadVideo.preload = 'auto';
+        preloadVideo.muted = true;
+        preloadVideo.load();
+        
+        // Store reference to prevent garbage collection
+        (window as any).__preloadedVideos = (window as any).__preloadedVideos || [];
+        (window as any).__preloadedVideos.push(preloadVideo);
+        
+        console.log(`🎮 Preloading video: ${video}`);
+      });
+    }
+  }, [isIntroVideo]);
+
   // Track mouse position for pointer lock clicks
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -160,10 +192,33 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
   // Handle video audio and music
   useEffect(() => {
     if (videoRef.current) {
-      // Only mute for intro video
+      // Only mute for intro video until user interaction
       videoRef.current.muted = isIntroVideo;
       videoRef.current.volume = 1.0;
+      
+      // Pause background music when video is playing
       pauseMusic();
+      
+      // Set playback quality to auto for better performance
+      if ('playsInline' in videoRef.current) {
+        (videoRef.current as any).playbackQuality = 'auto';
+      }
+      
+      // Force load and play the video immediately
+      videoRef.current.load();
+      
+      // More aggressive play attempt with retry mechanism
+      const attemptPlay = () => {
+        videoRef.current?.play().catch(error => {
+          console.log("Video autoplay failed, retrying:", error);
+          // For non-intro videos or after user interaction, retry with sound
+          if (!isIntroVideo || !isMuted) {
+            setTimeout(attemptPlay, 500);
+          }
+        });
+      };
+      
+      attemptPlay();
 
       const handleVideoEnd = () => {
         if (!isIntroVideo) {
@@ -172,10 +227,18 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
       };
 
       videoRef.current.addEventListener('ended', handleVideoEnd);
+      
+      // Add canplay handler to ensure video plays when ready
+      const handleCanPlay = () => {
+        attemptPlay();
+      };
+      
+      videoRef.current.addEventListener('canplay', handleCanPlay);
 
       return () => {
         if (videoRef.current) {
           videoRef.current.removeEventListener('ended', handleVideoEnd);
+          videoRef.current.removeEventListener('canplay', handleCanPlay);
         }
         if (!isIntroVideo && !isLoading) {
           playMusic();
@@ -183,6 +246,67 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
       };
     }
   }, [pauseMusic, playMusic, isIntroVideo, isLoading]);
+
+  // Add this new useEffect to handle video display
+  useEffect(() => {
+    // Force video to display immediately regardless of loading state
+    if (videoRef.current) {
+      // Ensure video is visible and playing immediately
+      videoRef.current.style.opacity = '1';
+      videoRef.current.style.visibility = 'visible';
+      
+      // For non-intro videos, ensure they play immediately with sound
+      if (!isIntroVideo) {
+        videoRef.current.muted = false;
+        videoRef.current.volume = 1.0;
+        
+        // Try multiple play attempts with increasing priority
+        const playVideo = () => {
+          if (videoRef.current) {
+            videoRef.current.play()
+              .then(() => console.log(`Video ${videoSrc} started playing successfully`))
+              .catch(err => {
+                console.error(`Error playing video ${videoSrc}:`, err);
+                // Retry with high priority flag if available
+                if ('priority' in HTMLMediaElement.prototype) {
+                  try {
+                    // @ts-ignore - This is a non-standard feature for some browsers
+                    videoRef.current.priority = 'high';
+                    videoRef.current.play().catch(console.error);
+                  } catch (e) {
+                    console.warn('Browser does not support priority attribute');
+                  }
+                }
+              });
+          }
+        };
+        
+        // Immediate play attempt
+        playVideo();
+        
+        // Secondary play attempt after a tiny delay (helps with some browsers)
+        setTimeout(playVideo, 10);
+        
+        // Load metadata quickly by setting playbackRate temporarily high
+        videoRef.current.playbackRate = 2.0;
+        setTimeout(() => {
+          if (videoRef.current) videoRef.current.playbackRate = 1.0;
+        }, 100);
+      }
+    }
+    
+    // Preload the video for future use
+    if (videoSrc && videoSrc !== 'intro.mp4') {
+      const preloadVideo = document.createElement('video');
+      preloadVideo.src = `/videos/${videoSrc}`;
+      preloadVideo.preload = 'auto';
+      preloadVideo.muted = true;
+      preloadVideo.load();
+      
+      // Store reference to prevent garbage collection
+      (window as any).__preloadedCurrentVideo = preloadVideo;
+    }
+  }, [videoSrc, isIntroVideo]);
 
   // Show intro text after unmute
   useEffect(() => {
@@ -196,7 +320,7 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
     if (isIntroVideo && isMuted) {
       const timer = setTimeout(() => {
         setShowUnmuteButton(true);
-      }, 1000);
+      }, 100); // Reduced from 1000ms to 100ms for faster response
       return () => clearTimeout(timer);
     }
   }, [isIntroVideo, isMuted]);
@@ -314,8 +438,43 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
 
   const handleUnmute = () => {
     if (videoRef.current && isMuted) {
+      // Store current time and playback state
+      const currentTime = videoRef.current.currentTime;
+      const wasPlaying = !videoRef.current.paused;
+      
+      // First unmute
       videoRef.current.muted = false;
+      videoRef.current.volume = 1.0;
+      
+      // Update state immediately
       setIsMuted(false);
+      
+      // Restore the current time and playback state
+      videoRef.current.currentTime = currentTime;
+      
+      // Only call play() if the video was playing and is now paused
+      if (wasPlaying && videoRef.current.paused) {
+        videoRef.current.play().catch(err => {
+          console.log("Play after unmute failed:", err);
+        });
+      }
+      
+      // For iOS, show continue button after a small delay
+      if (isIOS) {
+        setTimeout(() => {
+          setShowIOSContinue(true);
+        }, 250);
+      }
+      
+      // Begin preloading the central map in the background
+      const centralVideo = document.createElement('video');
+      centralVideo.src = '/videos/central.mp4';
+      centralVideo.preload = 'auto';
+      centralVideo.muted = true;
+      centralVideo.load();
+      
+      // Store reference to prevent garbage collection
+      (window as any).__preloadedCentralVideo = centralVideo;
     }
   };
 
@@ -329,9 +488,38 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
         muted={isIntroVideo}
         loop
         preload="auto"
-        style={{ pointerEvents: 'none' }}
-        onClick={(e) => e.preventDefault()}
+        style={{ 
+          pointerEvents: 'none',
+          opacity: 1,
+          visibility: 'visible',
+          objectFit: 'cover',
+          width: '100%',
+          height: '100%'
+        }}
+        onClick={(e) => {
+          e.preventDefault();
+          // Try playing on click (helps with autoplay restrictions)
+          if (videoRef.current && (isIntroVideo || videoRef.current.paused)) {
+            videoRef.current.play().catch(console.error);
+          }
+        }}
         onError={(e) => console.error('Video loading error:', e)}
+        onLoadedMetadata={(e) => {
+          const video = e.target as HTMLVideoElement;
+          // Try playing as soon as metadata is loaded (earlier than loadedData)
+          video.play().catch(err => console.log("Early play attempt:", err));
+          
+          // Check if this is the central video, prioritize it
+          if (videoSrc === 'central.mp4') {
+            // Set high priority for first map video
+            video.playbackRate = 1.0; // Normal speed
+            
+            // Set normal quality for performance
+            if ('playbackQuality' in video) {
+              (video as any).playbackQuality = 'auto';
+            }
+          }
+        }}
         onLoadedData={(e) => {
           const video = e.target as HTMLVideoElement;
           if (!isIntroVideo) {
@@ -372,6 +560,33 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
             />
           </motion.div>
         </div>
+      )}
+
+      {/* iOS-specific continue button - only shown on iOS devices */}
+      {isIOS && showIOSContinue && !isMuted && (
+        <motion.div 
+          className="absolute left-1/2 transform -translate-x-1/2"
+          style={{ 
+            top: '80%',
+            opacity: 0
+          }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+        >
+          <button
+            onClick={() => {
+              playMusic();
+              onLoadComplete();
+            }}
+            className="px-6 py-2 bg-white/20 backdrop-blur-sm rounded-lg text-white font-bytebounce text-lg"
+            style={{
+              fontFamily: 'bytebounce',
+              textShadow: '0 0 10px rgba(255,255,255,0.5)'
+            }}
+          >
+            Continue
+          </button>
+        </motion.div>
       )}
 
       {!isIntroVideo && (

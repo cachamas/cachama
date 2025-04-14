@@ -451,14 +451,29 @@ export default function World({ ...props }: WorldProps) {
         document.exitPointerLock();
       }
       
-      // Ensure correct video is set before triggering loading screen
+      // Set video and trigger loading screen FIRST - IMMEDIATE VIDEO PLAYBACK
       const correctVideo = useLoadingStore.getState().getVideoForMap(targetMap);
       useLoadingStore.getState().setCurrentVideo(correctVideo);
       
-      // Trigger loading screen without disrupting controls
-      handleMapChange(targetMap);
+      // Force loading screen to be visible with video playing BEFORE loading assets
+      useLoadingStore.getState().setLoading(true);
       
+      // Force video playback to start immediately
+      const videoElement = document.querySelector('.loading-screen video') as HTMLVideoElement;
+      if (videoElement) {
+        // Ensure video is visible and plays immediately
+        videoElement.style.opacity = '1';
+        videoElement.style.visibility = 'visible';
+        videoElement.muted = false;
+        videoElement.volume = 1.0;
+        videoElement.play().catch(console.error);
+      }
+      
+      // SHORT DELAY before starting to load the map - gives video time to start playing
       setTimeout(() => {
+        // Now start loading the map - this will update the progress bar while video plays
+        handleMapChange(targetMap);
+        
         // Store the current map before changing it
         if (currentMap === 'toris' && targetMap === 'central') {
           console.log('🌐 Setting previousMap to toris before teleporting to central');
@@ -522,7 +537,7 @@ export default function World({ ...props }: WorldProps) {
             detail: { map: targetMap }
           }));
         }, 500);
-      }, 500);
+      }, 100); // Short delay to ensure video starts playing first
     }
   }, [isTransitioning, setTransitioning, setSpawnPoint, setCurrentMap, handleMapChange]);
 
@@ -578,40 +593,11 @@ export default function World({ ...props }: WorldProps) {
     }
   }, [hoveredObject]);
 
-  // Handle interaction input
+  // Add event listeners for game interactions
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() === 'e' && hoveredObject) {
-        // Cancel throw animation when pressing E on interactables
-        window.dispatchEvent(new CustomEvent('cancel-throw'));
-        
-        console.log('Interacting with:', hoveredObject.name);
-        const info = getObjectInfo(hoveredObject.name);
-        console.log('Object info:', info);
-        
-        if (info.isMusicPlayer || hoveredObject.name.toLowerCase().includes('turntable')) {
-          console.log('Toggling music player');
-          const newState = !showMusicPlayer;
-          setShowMusicPlayer(newState);
-          
-          // Dispatch event with a small delay to ensure UI is ready
-          setTimeout(() => {
-            console.log('Dispatching toggle event:', { visible: newState });
-            window.dispatchEvent(new CustomEvent('toggle-music-player', { 
-              detail: { visible: newState } 
-            }));
-            // Dispatch interactable state change
-            window.dispatchEvent(new CustomEvent(newState ? 'interactable-opened' : 'interactable-closed'));
-          }, 50);
-        } else if (selectedObject === hoveredObject) {
-          setSelectedObject(null);
-          setShowInfo(false);
-          window.dispatchEvent(new CustomEvent('interactable-closed'));
-        } else {
-          setSelectedObject(hoveredObject);
-          setShowInfo(true);
-          window.dispatchEvent(new CustomEvent('interactable-opened'));
-        }
+      if (e.key === 'e' || e.key === 'E') {
+        handleClick();
       }
     };
 
@@ -727,18 +713,89 @@ export default function World({ ...props }: WorldProps) {
       }
     };
 
+    // Handle showBTRMap event for magnifying glass button
+    const handleShowBTRMap = (e: CustomEvent) => {
+      if (currentMap === 'central') {
+        console.log('🗺️ Show BTR Map event received in central map');
+        
+        // Get the object from the event detail
+        const object = e.detail?.object;
+        
+        if (object) {
+          // Set selected object and show info
+          setSelectedObject(object);
+          setShowInfo(true);
+          window.dispatchEvent(new CustomEvent('interactable-opened'));
+          
+          // Set flags to indicate map is open
+          document.body.setAttribute('data-map-open', 'true');
+          window.__btrMapOpen = true;
+        }
+      }
+    };
+    
+    // Handle findObjectByName event for MobileMapSlideshow
+    const handleFindObjectByName = (e: CustomEvent) => {
+      const name = e.detail?.name;
+      const callback = e.detail?.callback;
+      
+      if (name && callback && typeof callback === 'function') {
+        // Search through the scene to find the requested object
+        const searchScene = (scene: THREE.Object3D) => {
+          if (!scene) return;
+          
+          scene.traverse((object) => {
+            if (object.name === name) {
+              callback(object);
+            }
+          });
+        };
+        
+        // Search in current scene
+        let currentScene;
+        switch (currentMap) {
+          case 'central':
+            currentScene = centralScene;
+            break;
+          case 'gallery':
+            currentScene = galleryScene;
+            break;
+          case 'toris':
+            currentScene = torisScene;
+            break;
+          case 'music':
+            currentScene = musicScene;
+            break;
+          case 'gct':
+            currentScene = gctScene;
+            break;
+          case 'overworld':
+            currentScene = overworldScene;
+            break;
+        }
+        
+        if (currentScene) {
+          searchScene(currentScene);
+        }
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('click', handleClick);
     window.addEventListener('interact-with-object', handleMobileInteract);
     window.addEventListener('start-throw-animation', handleThrowAnimation);
+    window.addEventListener('show-btr-map', handleShowBTRMap as EventListener);
+    window.addEventListener('find-object-by-name', handleFindObjectByName as EventListener);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('click', handleClick);
       window.removeEventListener('interact-with-object', handleMobileInteract);
       window.removeEventListener('start-throw-animation', handleThrowAnimation);
+      window.removeEventListener('show-btr-map', handleShowBTRMap as EventListener);
+      window.removeEventListener('find-object-by-name', handleFindObjectByName as EventListener);
     };
-  }, [hoveredObject, selectedObject, setSelectedObject, setShowInfo, setShowMusicPlayer, showMusicPlayer]);
+  }, [hoveredObject, selectedObject, setSelectedObject, setShowInfo, setShowMusicPlayer, showMusicPlayer, currentMap]);
 
   // Show Now Playing notification on map change
   useEffect(() => {
@@ -1188,13 +1245,14 @@ export default function World({ ...props }: WorldProps) {
     }
   }, [currentMap, camera]);
 
-  // Add this near the other event listeners in a useEffect that doesn't have map changes as dependencies
+  // Listen for trigger-teleport event from mobile slideshows for full teleport experience
   useEffect(() => {
-    // Listen for trigger-teleport event from MobileToriSlideshow for full teleport experience
+    // Listen for trigger-teleport event from mobile slideshows
     const handleTriggerTeleport = (e: CustomEvent) => {
       if (e.detail && e.detail.targetMap) {
         const targetMap = e.detail.targetMap;
-        console.log(`🌐 Handling full teleport to ${targetMap} from mobile UI with loading screen`);
+        const fromMap = e.detail.fromMap || currentMap;
+        console.log(`🌐 Handling full teleport to ${targetMap} from ${fromMap} with loading screen`);
         
         // Provide haptic feedback if available
         if (navigator.vibrate) {
@@ -1207,7 +1265,7 @@ export default function World({ ...props }: WorldProps) {
         
         // Trigger map transition event for any listeners
         window.dispatchEvent(new CustomEvent('map-transition', { 
-          detail: { from: 'toris', to: targetMap } 
+          detail: { from: fromMap, to: targetMap } 
         }));
         
         // Execute the full teleport implementation
@@ -1232,8 +1290,13 @@ export default function World({ ...props }: WorldProps) {
   useEffect(() => {
     // Listen for teleport-to-central event from MobileToriSlideshow
     const handleTorisReturn = (e: CustomEvent) => {
-      if (currentMap === 'toris') {
-        console.log('🌐 Handling return to central from MobileToriSlideshow');
+      const { from, to } = e.detail || { from: '', to: '' };
+      
+      // Check if we're teleporting from toris, gct, or gallery to central
+      if ((currentMap === 'toris' && from === 'toris') || 
+          (currentMap === 'gct' && from === 'gct') || 
+          (currentMap === 'gallery' && from === 'gallery')) {
+        console.log(`🌐 Handling return to central from ${from}`);
         
         // Only proceed if not already transitioning
         if (!isTransitioning) {
@@ -1245,17 +1308,17 @@ export default function World({ ...props }: WorldProps) {
           
           // Store the current map before changing it
           window.dispatchEvent(new CustomEvent('map-transition', { 
-            detail: { from: 'toris', to: 'central' } 
+            detail: { from, to: 'central' } 
           }));
           
-          // Get the return spawn point for toris
-          const torisReturnSpawn = RETURN_TO_CENTRAL_SPAWN_POINTS.toris;
-          console.log('🌐 Teleporting FROM toris TO central, using spawn point:', torisReturnSpawn.position);
+          // Get the return spawn point for the current map
+          const returnSpawn = RETURN_TO_CENTRAL_SPAWN_POINTS[from as keyof typeof RETURN_TO_CENTRAL_SPAWN_POINTS];
+          console.log(`🌐 Teleporting FROM ${from} TO central, using spawn point:`, returnSpawn.position);
           
           // Set spawn point for when we arrive in central
           setSpawnPoint('central', {
-            position: [...torisReturnSpawn.position] as [number, number, number],
-            rotation: [...torisReturnSpawn.rotation] as [number, number, number]
+            position: [...returnSpawn.position] as [number, number, number],
+            rotation: [...returnSpawn.rotation] as [number, number, number]
           });
           
           // Provide haptic feedback if available
@@ -1414,6 +1477,50 @@ export default function World({ ...props }: WorldProps) {
       }
     }
   }, [currentMap, torisScene, setSelectedObject, setShowInfo, setForceTorisOpen]);
+
+  // Preload videos for connected maps when a map loads
+  useEffect(() => {
+    // Skip during transitions
+    if (isTransitioning) return;
+    
+    // Define connections between maps (which maps are directly accessible from each map)
+    const mapConnections: Record<string, string[]> = {
+      'central': ['overworld', 'gallery', 'gct', 'music', 'toris'],
+      'overworld': ['central'],
+      'gallery': ['central'],
+      'gct': ['central'],
+      'music': ['central'],
+      'toris': ['central']
+    };
+    
+    // Get possible destinations from current map
+    const possibleDestinations = mapConnections[currentMap] || [];
+    
+    if (possibleDestinations.length > 0) {
+      console.log(`🎮 Preloading videos for ${possibleDestinations.length} possible destinations from ${currentMap}`);
+      
+      // Preload videos for possible destinations with a slight delay
+      // to prioritize loading the current map first
+      setTimeout(() => {
+        possibleDestinations.forEach(mapName => {
+          const videoName = useLoadingStore.getState().getVideoForMap(mapName);
+          console.log(`🎮 Preloading video for possible destination: ${mapName} (${videoName})`);
+          
+          // Create a hidden video element for preloading
+          const preloadVideo = document.createElement('video');
+          preloadVideo.src = `/videos/${videoName}`;
+          preloadVideo.preload = 'auto';
+          preloadVideo.muted = true;
+          preloadVideo.style.display = 'none';
+          preloadVideo.load();
+          
+          // Store reference to prevent garbage collection
+          (window as any).__preloadedDestinationVideos = (window as any).__preloadedDestinationVideos || {};
+          (window as any).__preloadedDestinationVideos[mapName] = preloadVideo;
+        });
+      }, 2000); // Delay to prioritize current map loading
+    }
+  }, [currentMap, isTransitioning]);
 
   return (
     <>
