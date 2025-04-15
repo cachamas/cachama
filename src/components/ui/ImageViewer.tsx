@@ -271,29 +271,17 @@ export default function ImageViewer({ imagePath, title, description, variant }: 
     }
     
     // DESKTOP VIEW 
-    const desktopSizeMultiplier = 1.85;
-    
+    const desktopSizeMultiplier = 1.25;
     return (
       <div 
         ref={containerRef} 
-        className="w-full h-full flex flex-col relative" 
+        className="w-full h-full flex flex-col" 
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
         }}
-        onMouseDown={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        }}
       >
-        <div 
-          className="flex-1 flex items-center justify-center p-4 relative"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-        >
-          {/* Main map image */}
+        <div className="flex-1 flex items-center justify-center p-4 relative" style={{ transform: 'translateY(-9%)' }}>
           <img
             ref={imageRef}
             src={currentImage}

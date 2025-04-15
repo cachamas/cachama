@@ -172,7 +172,7 @@ export default function ModelViewer({ modelPath }: ModelViewerProps) {
     <div className="w-full h-[80vh] bg-transparent relative">
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center z-10">
-          <div className="text-4xl font-bold text-white animate-pulse">
+          <div className="text-4xl font-['ByteBounce'] text-white animate-pulse">
             LOADING...
           </div>
         </div>

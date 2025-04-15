@@ -7,6 +7,8 @@ interface MapState {
   setCurrentMap: (map: string) => void;
   isTransitioning: boolean;
   setTransitioning: (state: boolean) => void;
+  lastTeleportTime: number;
+  setLastTeleportTime: (time: number) => void;
   spawnPoints: {
     [key: string]: {
       position: [number, number, number];
@@ -22,6 +24,8 @@ export const useMapStore = create<MapState>((set, get) => ({
   setCurrentMap: (map) => set({ currentMap: map }),
   isTransitioning: false,
   setTransitioning: (state) => set({ isTransitioning: state }),
+  lastTeleportTime: 0,
+  setLastTeleportTime: (time) => set({ lastTeleportTime: time }),
   spawnPoints: {
     overworld: {
       position: [-11.28, 262.44, 79.57],

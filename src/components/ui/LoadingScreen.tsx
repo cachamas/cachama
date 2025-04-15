@@ -334,13 +334,22 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
     }
   }, [isIntroVideo, isMuted]);
 
-  // Show unmute button after 1 second
+  // Show unmute button after video starts playing
   useEffect(() => {
     if (isIntroVideo && isMuted) {
-      const timer = setTimeout(() => {
+      const handlePlay = () => {
         setShowUnmuteButton(true);
-      }, 100); // Reduced from 1000ms to 100ms for faster response
-      return () => clearTimeout(timer);
+      };
+
+      if (videoRef.current) {
+        videoRef.current.addEventListener('playing', handlePlay);
+      }
+
+      return () => {
+        if (videoRef.current) {
+          videoRef.current.removeEventListener('playing', handlePlay);
+        }
+      };
     }
   }, [isIntroVideo, isMuted]);
 
@@ -374,7 +383,8 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
   }, [isIntroVideo, isMuted]);
 
   // Handle intro text click and pointer lock click
-  const handleIntroClick = (e: React.MouseEvent) => {
+  const handleIntroClick = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
     e.stopPropagation();
     if (isIntroVideo && showIntroText && !preventSkip) {
       handlePortfolioActivation();
@@ -383,13 +393,17 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
 
   // Handle any click when pointer is locked
   useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
+    const handleClick = (e: MouseEvent | TouchEvent) => {
       if (!isIntroVideo || !showIntroText || preventSkip || isMuted) return;
       handlePortfolioActivation();
     };
 
     document.addEventListener('click', handleClick);
-    return () => document.removeEventListener('click', handleClick);
+    document.addEventListener('touchstart', handleClick);
+    return () => {
+      document.removeEventListener('click', handleClick);
+      document.removeEventListener('touchstart', handleClick);
+    };
   }, [isIntroVideo, showIntroText, preventSkip, isMuted]);
 
   // Centralized function to handle portfolio activation
@@ -439,7 +453,8 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
   useEffect(() => {
     if (isIntroVideo || preventSkip) return;
 
-    const handleClick = () => {
+    const handleClick = (e: MouseEvent | TouchEvent) => {
+      e.preventDefault();
       if (canContinue) {
         playMusic();
         onLoadComplete();
@@ -447,15 +462,19 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
     };
 
     window.addEventListener('click', handleClick);
+    window.addEventListener('touchstart', handleClick);
     window.addEventListener('mousedown', handleClick);
 
     return () => {
       window.removeEventListener('click', handleClick);
+      window.removeEventListener('touchstart', handleClick);
       window.removeEventListener('mousedown', handleClick);
     };
   }, [canContinue, onLoadComplete, isIntroVideo, playMusic, preventSkip]);
 
-  const handleUnmute = () => {
+  const handleUnmute = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (videoRef.current && isMuted) {
       // Store current time and playback state
       const currentTime = videoRef.current.currentTime;
@@ -526,9 +545,15 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
         const mapImg = new Image();
         mapImg.src = '/images/map.webp';
         
-        // Store reference to prevent garbage collection
+        // Preload QR code with high priority
+        const qrImg = new Image();
+        qrImg.src = '/images/qr2.webp';
+        qrImg.fetchPriority = 'high';
+        
+        // Store references to prevent garbage collection
         (window as any).__preloadedBTRMap = {
-          mapImg
+          mapImg,
+          qrImg
         };
       };
       
@@ -541,10 +566,29 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
   }, [isMuted, isIntroVideo]);
 
   return (
-    <div className="loading-screen" style={{ pointerEvents: 'auto' }}>
+    <div className="loading-screen" style={{ pointerEvents: 'auto', touchAction: 'none' }}>
       {showLoadingGif && (
         <div className="absolute inset-0 flex items-center justify-center z-50">
-          <img src="/images/vv.gif" alt="Loading..." className="max-w-[200px] h-auto" />
+          <img 
+            src={isIntroVideo ? "/images/introgif.gif" : "/images/vv.gif"} 
+            alt="Loading..." 
+            className={isIntroVideo ? "max-w-[200px] h-auto" : "w-full h-full object-contain"}
+            style={{
+              imageRendering: 'pixelated',
+              ...(isIntroVideo ? {} : { 
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                minWidth: '100%',
+                minHeight: '100%',
+                width: 'auto',
+                height: 'auto',
+                maxWidth: 'none',
+                maxHeight: 'none'
+              })
+            }}
+          />
         </div>
       )}
       <video
@@ -561,7 +605,8 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
           visibility: isVideoReady ? 'visible' : 'hidden',
           objectFit: 'cover',
           width: '100%',
-          height: '100%'
+          height: '100%',
+          touchAction: 'none'
         }}
         onClick={(e) => {
           e.preventDefault();
@@ -601,10 +646,12 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
         <div 
           className="absolute inset-0 cursor-pointer"
           onClick={handleUnmute}
+          onTouchStart={handleUnmute}
           style={{ 
             userSelect: 'none',
             pointerEvents: 'auto',
-            zIndex: 50
+            zIndex: 50,
+            touchAction: 'none'
           }}
         >
           <motion.div 
@@ -635,20 +682,32 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
           className="absolute left-1/2 transform -translate-x-1/2"
           style={{ 
             top: '80%',
-            opacity: 0
+            opacity: 0,
+            touchAction: 'none'
           }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
         >
           <button
-            onClick={() => {
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
               playMusic();
               onLoadComplete();
             }}
-            className="px-6 py-2 bg-white/20 backdrop-blur-sm rounded-lg text-white font-bytebounce text-lg"
+            onTouchStart={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              playMusic();
+              onLoadComplete();
+            }}
             style={{
               fontFamily: 'bytebounce',
-              textShadow: '0 0 10px rgba(255,255,255,0.5)'
+              textShadow: '0 0 10px rgba(255,255,255,0.5)',
+              touchAction: 'none',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+              WebkitTouchCallout: 'none'
             }}
           >
             Continue
@@ -657,7 +716,7 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
       )}
 
       {!isIntroVideo && (
-        <div className="loading-overlay" style={{ pointerEvents: 'auto' }}>
+        <div className="loading-overlay" style={{ pointerEvents: 'auto', touchAction: 'none' }}>
           <div style={{
             width: '300px',
             height: '12px',
@@ -686,9 +745,10 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
           {canContinue && (
             <div className="pixel-font text-center" style={{ 
               color: 'white',
-              textShadow: '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000',
               marginTop: '20px',
-              userSelect: 'none'
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+              WebkitTouchCallout: 'none'
             }}>
               <div className="text-3xl">CLICK TO CONTINUE</div>
               <div className="text-base mt-2">CACHAMA.COM / DM@HOMBRECHIVO.COM</div>
@@ -700,7 +760,7 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
       {isIntroVideo && !isMuted && showLoadingBar && (
         <div 
           className="absolute inset-0 flex items-center justify-center"
-          style={{ pointerEvents: 'none' }}
+          style={{ pointerEvents: 'none', touchAction: 'none' }}
         >
           <div 
             style={{
@@ -734,8 +794,9 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
       {isIntroVideo && showIntroText && !preventSkip && !isMuted && (
         <div 
           className="absolute inset-0 flex items-center justify-center"
-          style={{ pointerEvents: 'auto' }}
+          style={{ pointerEvents: 'auto', touchAction: 'none' }}
           onClick={handleIntroClick}
+          onTouchStart={handleIntroClick}
         >
           <div 
             className="pixel-font text-center flex flex-col items-center justify-center pointer-events-none"
@@ -744,6 +805,8 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
               textShadow: '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000',
               padding: '20px',
               userSelect: 'none',
+              WebkitUserSelect: 'none',
+              WebkitTouchCallout: 'none',
               width: '400px',
               height: '150px',
               whiteSpace: 'nowrap',
@@ -753,8 +816,8 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
               transform: 'translate(-50%, -50%)'
             }}
           >
-            <div className="text-4xl mb-4">THIS IS A PORTFOLIO</div>
-            <div className="text-2xl">CLICK TO ACCESS</div>
+            <div className="text-4xl">THIS IS A PORTFOLIO</div>
+            <div className="text-2xl mt-4">CLICK TO CONTINUE</div>
           </div>
         </div>
       )}

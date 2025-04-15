@@ -114,6 +114,8 @@ interface MapState {
   spawnPoints: typeof INITIAL_SPAWN_POINTS;
   setSpawnPoint: (map: keyof typeof INITIAL_SPAWN_POINTS, data: { position: [number, number, number], rotation: [number, number, number] }) => void;
   handleMapTransition: (targetMap: string) => void;
+  lastTeleportTime: number;
+  setLastTeleportTime: (time: number) => void;
 }
 
 // Map store
@@ -143,7 +145,9 @@ export const useMapStore = create<MapState>((set) => ({
       }, 500);
     }
     return state;
-  })
+  }),
+  lastTeleportTime: 0,
+  setLastTeleportTime: (time) => set({ lastTeleportTime: time })
 }));
 
 // Enemy spawn points in central map
@@ -159,7 +163,7 @@ interface WorldProps {
 }
 
 export default function World({ ...props }: WorldProps) {
-  const { currentMap, setCurrentMap, isTransitioning, setTransitioning, setSpawnPoint } = useMapStore();
+  const { currentMap, setCurrentMap, isTransitioning, setTransitioning, setSpawnPoint, lastTeleportTime, setLastTeleportTime } = useMapStore();
   const { setForceTorisOpen } = useInteractionStore();
   const { handleMapChange, setPhysicsReady } = useLoadingStore();
   const addEnemy = useGameStore((state) => state.addEnemy);
@@ -440,8 +444,19 @@ export default function World({ ...props }: WorldProps) {
 
   // Handle teleport between maps - with persistent mobile controls
   const handleTeleport = useCallback((targetMap: string) => {
+    const { lastTeleportTime, setLastTeleportTime } = useMapStore.getState();
+    const currentTime = Date.now();
+    const TELEPORT_COOLDOWN = 2000; // 2 second cooldown
+
+    // Check if enough time has passed since last teleport
+    if (currentTime - lastTeleportTime < TELEPORT_COOLDOWN) {
+      console.log('🌐 Teleport cooldown active, skipping teleport');
+      return;
+    }
+
     if (!isTransitioning) {
       setTransitioning(true);
+      setLastTeleportTime(currentTime);
       setFadeOpacity(1);
       
       const isMobileDevice = document.body.getAttribute('data-is-mobile') === 'true';

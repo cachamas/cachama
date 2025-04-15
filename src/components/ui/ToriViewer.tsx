@@ -493,11 +493,8 @@ export default function ToriViewer({ variant }: ToriViewerProps) {
     <div className="w-full h-[80vh] bg-transparent relative">
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center z-10">
-          <div className="text-center">
-            <div className="text-white text-2xl font-['ByteBounce'] mb-2">LOADING TORI...</div>
-            <div className="text-white text-xl font-['ByteBounce']">
-              {Math.round(loadingProgress * 100)}%
-            </div>
+          <div className="text-4xl font-['ByteBounce'] text-white animate-pulse">
+            LOADING TORI...
           </div>
         </div>
       )}
