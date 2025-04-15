@@ -21,20 +21,20 @@ const DEFAULT_STATE: MobileControlsState = {
 };
 
 // Constants for control smoothing
-const MOVEMENT_SMOOTHING = 0.10; // Reduced for more responsive movement
-const LOOK_SMOOTHING = 0.12; // Reduced for more responsive camera
-const MOVEMENT_DEADZONE = 0.05; // Reduced for better small movement detection
-const LOOK_SENSITIVITY = 0.075; // Adjusted for better control
+const MOVEMENT_SMOOTHING = 0.15; // Increased for smoother movement
+const LOOK_SMOOTHING = 0.15; // Increased for smoother camera
+const MOVEMENT_DEADZONE = 0.03; // Reduced for better small movement detection
+const LOOK_SENSITIVITY = 0.1; // Increased for better control
 
 // Add map-specific sensitivity adjustments
 const MAP_SENSITIVITY = {
     toris: {
-        movement: 0.8,
-        look: 0.85
+        movement: 0.9,
+        look: 0.9
     },
     gct: {
-        movement: 0.85,
-        look: 0.9
+        movement: 0.9,
+        look: 0.95
     },
     default: {
         movement: 1.0,
@@ -50,7 +50,7 @@ const smoothValue = (current: number, target: number, smoothing: number, mapName
     
     // Use less smoothing for heavy maps to reduce computations
     const isHeavyMap = mapName === 'gct' || mapName === 'toris';
-    const effectiveSmoothing = isHeavyMap ? smoothing * 0.75 : smoothing;
+    const effectiveSmoothing = isHeavyMap ? smoothing * 0.85 : smoothing;
     
     // Apply smoothing with sensitivity
     return current + ((target * sensitivity) - current) * effectiveSmoothing;

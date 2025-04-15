@@ -381,6 +381,14 @@ export default function Player({ onPositionChange, mobileControls }: PlayerProps
         // Skip emitting movement events in toris map to prevent conflicts with slideshow
         // Emit movement event for slideshow detection in other maps
         if (currentMap !== 'toris') {
+          // Dispatch mobile-move event for viewmodel
+          window.dispatchEvent(new CustomEvent('mobile-move', {
+            detail: {
+              x: mobileControls.moveX,
+              y: mobileControls.moveY
+            }
+          }));
+          
           window.dispatchEvent(new CustomEvent('camera-movement', {
             detail: {
               moveX: mobileControls.moveX,
@@ -400,6 +408,11 @@ export default function Player({ onPositionChange, mobileControls }: PlayerProps
         mobileInputRef.current.moveX = 0;
         mobileInputRef.current.moveY = 0;
         mobileInputRef.current.activeMoveJoystick = false;
+        
+        // Reset mobile movement
+        window.dispatchEvent(new CustomEvent('mobile-move', {
+          detail: { x: 0, y: 0 }
+        }));
       }
 
       // Store look values ONLY if look joystick is active
@@ -426,6 +439,14 @@ export default function Player({ onPositionChange, mobileControls }: PlayerProps
         // Skip emitting camera movement events in toris map to prevent conflicts with slideshow
         // Dispatch camera movement event for other maps
         if (currentMap !== 'toris') {
+          // Dispatch mobile-look event for viewmodel
+          window.dispatchEvent(new CustomEvent('mobile-look', {
+            detail: {
+              x: mobileControls.lookX,
+              y: mobileControls.lookY
+            }
+          }));
+          
           window.dispatchEvent(new CustomEvent('camera-movement', {
             detail: {
               lookX: mobileControls.lookX,
@@ -444,24 +465,11 @@ export default function Player({ onPositionChange, mobileControls }: PlayerProps
           // Always dispatch a mobile-joystick-active event for detection
           window.dispatchEvent(new CustomEvent('mobile-joystick-active'));
         }
-
-        // Check for stuck camera with timing check
-        const timeSinceLastLook = Date.now() - mobileInputRef.current.lastActiveLookTime;
-        if (timeSinceLastLook < 1000) { // Only check if we've had recent look input
-          checkCameraStuck({ x: rotationX.current, y: rotationY.current });
-        }
-        
-        // Clear any existing stuck timeout and set a new one
-        if (cameraStuckTimeoutRef.current) {
-          clearTimeout(cameraStuckTimeoutRef.current);
-        }
-        cameraStuckTimeoutRef.current = setTimeout(() => {
-          consecutiveStuckChecksRef.current = 0;
-        }, 500);
       } else {
-        mobileInputRef.current.lookX = 0;
-        mobileInputRef.current.lookY = 0;
-        mobileInputRef.current.activeLookJoystick = false;
+        // Reset mobile look
+        window.dispatchEvent(new CustomEvent('mobile-look', {
+          detail: { x: 0, y: 0 }
+        }));
       }
     }
     

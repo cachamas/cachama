@@ -281,6 +281,46 @@ export default function SimpleViewmodel() {
     }
   }, []);
   
+  // Mobile event handlers
+  const handleMobileMove = (e: CustomEvent<{x: number, y: number}>) => {
+    const { x, y } = e.detail;
+    
+    // Detect if mobile is moving based on joystick values
+    const joystickMagnitude = Math.sqrt(x * x + y * y);
+    
+    // Set mobile moving state if joystick movement exceeds threshold
+    animState.current.mobileMoving = joystickMagnitude > 0.1;
+    
+    // Apply movement to viewmodel sway
+    if (animState.current.mobileMoving) {
+      // Reduced movement for mobile by 50%
+      animState.current.walk.x = -x * 4.8; // Reduced from 9.6 to 4.8 (50% less)
+      animState.current.walk.y = y * 3.2; // Reduced from 6.4 to 3.2 (50% less)
+    } else {
+      // Reset movement when not moving
+      animState.current.walk.x = 0;
+      animState.current.walk.y = 0;
+    }
+  };
+  
+  // Handle mobile look/camera movement
+  const handleMobileLook = (e: CustomEvent<{x: number, y: number}>) => {
+    if (!('ontouchstart' in window)) return;
+
+    const { x, y } = e.detail;
+    const sensitivity = 4.8; // Keeping camera sensitivity the same
+    
+    // Apply camera movement to viewmodel sway
+    animState.current.mouse.x -= x * sensitivity;
+    animState.current.mouse.y -= y * sensitivity;
+    
+    lastMouseMove.current = { 
+      x: x * sensitivity, 
+      y: y * sensitivity, 
+      time: performance.now() 
+    };
+  };
+
   // Combined animation and movement system
   useEffect(() => {
     let lastTime = performance.now();
@@ -290,8 +330,8 @@ export default function SimpleViewmodel() {
       const delta = (currentTime - lastTime) / 1000;
       lastTime = currentTime;
 
-      // Mouse movement decay
-      const mouseDecay = Math.pow(0.1, delta);
+      // Mouse movement decay - reduced for more responsive movement
+      const mouseDecay = Math.pow(0.3, delta);
       animState.current.mouse.x *= mouseDecay;
       animState.current.mouse.y *= mouseDecay;
 
@@ -307,7 +347,7 @@ export default function SimpleViewmodel() {
                       animState.current.mobileMoving;
       
       // Always use sprint intensity for movement
-      const isSprinting = true; // Always use sprint movement
+      const isSprinting = true;
 
       // Walking animation
       if (isMoving) {
@@ -315,30 +355,30 @@ export default function SimpleViewmodel() {
         const walkTime = currentTime * (isSprinting ? 0.004 : 0.003);
         
         if (isSprinting) {
-          // More pronounced sprint movement
-          animState.current.walk.x = Math.sin(walkTime) * 4;
-          // Deeper vertical movement + slight forward tilt
-          animState.current.walk.y = Math.abs(Math.sin(walkTime * 2)) * 6 + 
-                                   Math.sin(walkTime) * 2;
+          // Reduced sprint movement by 50%
+          animState.current.walk.x = Math.sin(walkTime) * 3.2; // Reduced from 6.4 to 3.2
+          // Reduced vertical movement + slight forward tilt by 50%
+          animState.current.walk.y = Math.abs(Math.sin(walkTime * 2)) * 4.8 + 
+                                   Math.sin(walkTime) * 1.6; // Reduced from 9.6 and 3.2
         } else {
-          // Gentler walking sway
-          animState.current.walk.x = Math.sin(walkTime) * 2;
-          // Deeper walking bob + slight forward tilt
-          animState.current.walk.y = Math.abs(Math.sin(walkTime * 2)) * 3 + 
-                                   Math.sin(walkTime) * 1;
+          // Reduced walking sway by 50%
+          animState.current.walk.x = Math.sin(walkTime) * 1.6; // Reduced from 3.2 to 1.6
+          // Reduced walking bob + slight forward tilt by 50%
+          animState.current.walk.y = Math.abs(Math.sin(walkTime * 2)) * 2.4 + 
+                                   Math.sin(walkTime) * 0.8; // Reduced from 4.8 and 1.6
         }
       } else {
         // Smoother reset
-        animState.current.walk.x *= 0.85;
-        animState.current.walk.y *= 0.85;
+        animState.current.walk.x *= 0.95;
+        animState.current.walk.y *= 0.95;
       }
 
       // Apply movement to viewmodel
       if (viewmodelRef.current && currentAnimation.current === 'idle') {
         const sprintIntensity = 1.15; // Always use sprint intensity
         const totalOffset = {
-          x: (animState.current.walk.x + animState.current.mouse.x) * 2,
-          y: (animState.current.walk.y + animState.current.mouse.y) * 2.5
+          x: (animState.current.walk.x + animState.current.mouse.x) * 2, // Reduced from 4 to 2 (50% less)
+          y: (animState.current.walk.y + animState.current.mouse.y) * 2.4 // Reduced from 4.8 to 2.4 (50% less)
         };
 
         viewmodelRef.current.style.transform = `
@@ -430,40 +470,6 @@ export default function SimpleViewmodel() {
     };
 
     // Mobile event handlers
-    const handleMobileMove = (e: CustomEvent<{x: number, y: number}>) => {
-      const { x, y } = e.detail;
-      
-      // Detect if mobile is moving based on joystick values
-      const joystickMagnitude = Math.sqrt(x * x + y * y);
-      
-      // Set mobile moving state if joystick movement exceeds threshold
-      animState.current.mobileMoving = joystickMagnitude > 0.1;
-      
-      // Optional: add some viewmodel sway based on joystick direction
-      if (animState.current.mobileMoving) {
-        animState.current.mouse.x = -x * 3;
-        animState.current.mouse.y = y * 2;
-      }
-    };
-    
-    // Handle mobile look/camera movement
-    const handleMobileLook = (e: CustomEvent<{x: number, y: number}>) => {
-      if (!('ontouchstart' in window)) return;
-
-      const { x, y } = e.detail;
-      const sensitivity = 0.265; // Increased by 65% from 0.1 for more dramatic mobile sway
-      
-      // Apply camera movement to viewmodel sway
-      animState.current.mouse.x -= x * sensitivity;
-      animState.current.mouse.y -= y * sensitivity;
-      
-      lastMouseMove.current = { 
-        x: x * sensitivity, 
-        y: y * sensitivity, 
-        time: performance.now() 
-      };
-    };
-
     const handleMobileShoot = () => {
       if (document.documentElement.classList.contains('pointer-lock-element') || 
           document.pointerLockElement ||

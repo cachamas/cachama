@@ -32,6 +32,15 @@ interface AudioState {
 
 const CROSSFADE_DURATION = 2000; // 2 seconds crossfade
 
+// Add iOS audio context initialization
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+let audioContext: AudioContext | null = null;
+
+if (isIOS) {
+  const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+  audioContext = new AudioContext();
+}
+
 export const useAudioStore = create<AudioState>((set, get) => ({
   currentTrack: null,
   isPlaying: false,
@@ -53,10 +62,18 @@ export const useAudioStore = create<AudioState>((set, get) => ({
       nextHowl.unload();
     }
 
+    // For iOS, ensure audio context is resumed
+    if (isIOS && audioContext && audioContext.state === 'suspended') {
+      audioContext.resume().then(() => {
+        console.log('iOS audio context resumed');
+      });
+    }
+
     const newHowl = new Howl({
       src: [track.audioFile],
-      volume: volume, // Use the store's volume setting
+      volume: volume,
       autoplay: false,
+      html5: isIOS, // Use HTML5 audio for iOS
       onend: () => {
         console.log('Track ended, playing next');
         get().nextTrack();
@@ -91,8 +108,8 @@ export const useAudioStore = create<AudioState>((set, get) => ({
         console.log('Track loaded:', track.title);
         set({ duration: newHowl.duration() });
       },
-      onloaderror: () => {
-        console.error('Failed to load track:', track.title);
+      onloaderror: (id, error) => {
+        console.error('Failed to load track:', track.title, error);
         set({ isPlaying: false });
       }
     });
@@ -126,10 +143,20 @@ export const useAudioStore = create<AudioState>((set, get) => ({
     const { howl, volume } = get();
     if (howl) {
       console.log('Playing track');
-      // Resume from current position instead of starting over
-      howl.volume(volume);
-      howl.play();
-      set({ isPlaying: true });
+      
+      // For iOS, ensure audio context is resumed
+      if (isIOS && audioContext && audioContext.state === 'suspended') {
+        audioContext.resume().then(() => {
+          console.log('iOS audio context resumed before play');
+          howl.volume(volume);
+          howl.play();
+          set({ isPlaying: true });
+        });
+      } else {
+        howl.volume(volume);
+        howl.play();
+        set({ isPlaying: true });
+      }
     }
   },
 

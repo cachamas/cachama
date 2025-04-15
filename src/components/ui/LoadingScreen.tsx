@@ -35,6 +35,7 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [showLoadingGif, setShowLoadingGif] = useState(true);
+  const [hasIOSInteracted, setHasIOSInteracted] = useState(false);
 
   // Set up loading manager
   useEffect(() => {
@@ -569,6 +570,78 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
     }
   }, [isMuted, isIntroVideo]);
 
+  // Add iOS interaction handler
+  useEffect(() => {
+    if (isIOS) {
+      const handleIOSInteraction = (e: TouchEvent) => {
+        e.preventDefault();
+        if (!hasIOSInteracted) {
+          setHasIOSInteracted(true);
+          // Initialize audio context
+          const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+          const audioContext = new AudioContext();
+          
+          // Resume audio context on first interaction
+          if (audioContext.state === 'suspended') {
+            audioContext.resume().then(() => {
+              console.log('Audio context resumed on iOS');
+              // Unmute video and start playing
+              if (videoRef.current) {
+                videoRef.current.muted = false;
+                videoRef.current.play().catch(err => {
+                  console.log('iOS video play error:', err);
+                });
+              }
+              // Show continue button after a short delay
+              setTimeout(() => {
+                setShowIOSContinue(true);
+              }, 500);
+            });
+          }
+        }
+      };
+
+      // Add touch event listeners
+      document.addEventListener('touchstart', handleIOSInteraction, { passive: false });
+      document.addEventListener('touchend', handleIOSInteraction, { passive: false });
+
+      return () => {
+        document.removeEventListener('touchstart', handleIOSInteraction);
+        document.removeEventListener('touchend', handleIOSInteraction);
+      };
+    }
+  }, [isIOS, hasIOSInteracted]);
+
+  // Modify video initialization for iOS
+  useEffect(() => {
+    if (videoRef.current) {
+      // Set initial video state
+      videoRef.current.muted = isIOS ? true : isIntroVideo;
+      videoRef.current.volume = 1.0;
+      
+      // Add playsinline attribute for iOS
+      videoRef.current.setAttribute('playsinline', '');
+      videoRef.current.setAttribute('webkit-playsinline', '');
+      
+      // Force load and play the video immediately
+      videoRef.current.load();
+      
+      const attemptPlay = () => {
+        videoRef.current?.play().catch(error => {
+          console.log("Video autoplay failed, retrying:", error);
+          if (!isIntroVideo || !isMuted) {
+            setTimeout(attemptPlay, 500);
+          }
+        });
+      };
+      
+      // For iOS, only attempt play after interaction
+      if (!isIOS || hasIOSInteracted) {
+        attemptPlay();
+      }
+    }
+  }, [isIOS, hasIOSInteracted, isIntroVideo, isMuted]);
+
   return (
     <div className="loading-screen" style={{ pointerEvents: 'auto', touchAction: 'none' }}>
       {showLoadingGif && (
@@ -711,7 +784,12 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
               touchAction: 'none',
               userSelect: 'none',
               WebkitUserSelect: 'none',
-              WebkitTouchCallout: 'none'
+              WebkitTouchCallout: 'none',
+              padding: '12px 24px',
+              fontSize: '1.2rem',
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              border: '2px solid white',
+              borderRadius: '4px'
             }}
           >
             Continue
