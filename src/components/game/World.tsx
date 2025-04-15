@@ -613,6 +613,42 @@ export default function World({ ...props }: WorldProps) {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'e' || e.key === 'E') {
         handleClick();
+      } else if (e.key === 'm' || e.key === 'M') {
+        // Check if map is already open
+        const isMapOpen = document.body.getAttribute('data-map-open') === 'true' || window.__btrMapOpen;
+        
+        if (isMapOpen) {
+          // Close the map
+          document.body.removeAttribute('data-map-open');
+          window.__btrMapOpen = false;
+          useInteractionStore.getState().setShowInfo(false);
+          useInteractionStore.getState().setSelectedObject(null);
+          useInteractionStore.getState().setHoveredObject(null);
+          
+          // Reacquire pointer lock if needed
+          if (!document.pointerLockElement) {
+            const canvas = document.querySelector('canvas');
+            if (canvas) {
+              canvas.requestPointerLock();
+            }
+          }
+        } else {
+          // Open the map
+          const btrMap = currentScene.getObjectByName('Plane__0024');
+          if (btrMap) {
+            useInteractionStore.getState().setHoveredObject(btrMap);
+            useInteractionStore.getState().setSelectedObject(btrMap);
+            useInteractionStore.getState().setShowInfo(true);
+            
+            if (document.pointerLockElement) {
+              document.exitPointerLock();
+            }
+            
+            document.body.setAttribute('data-map-open', 'true');
+            window.__btrMapOpen = true;
+            window.dispatchEvent(new CustomEvent('interactable-opened'));
+          }
+        }
       }
     };
 
@@ -1212,53 +1248,41 @@ export default function World({ ...props }: WorldProps) {
   useEffect(() => {
     if (currentMap === 'toris') {
       const CORRECT_POSITION = new THREE.Vector3(-203, -232, 73);
-      const MAX_DISTANCE = 50; // If player is further than this from correct position, force teleport
+      const MAX_DISTANCE = 50;
       
       // Initial force teleport immediately on map load
       camera.position.copy(CORRECT_POSITION);
       
-      // Force position again after a small delay to handle any physics initialization
-      setTimeout(() => {
-        camera.position.copy(CORRECT_POSITION);
-        console.log('🎮 Initial force position for toris map applied');
-      }, 100);
-
-      // Register a listener for player reset events
-      const handleResetPlayer = () => {
-        camera.position.copy(CORRECT_POSITION);
-        console.log('🎮 Player position reset to toris spawn point');
-      };
-      window.addEventListener('reset-player-state', handleResetPlayer);
-      
-      // Set up multiple safety checks
+      // Set up the position forcing function
       const forceCorrectPosition = () => {
         const distance = camera.position.distanceTo(CORRECT_POSITION);
-        if (distance > 1) { // If more than 1 unit away from correct position
+        if (distance > 1) {
           console.log('🎮 Forcing toris position - Distance from correct:', distance);
           camera.position.copy(CORRECT_POSITION);
           
-          // If we're very far, also reset velocity and physics state
           if (distance > MAX_DISTANCE) {
-            // Dispatch event to reset player state
             window.dispatchEvent(new CustomEvent('reset-player-state'));
           }
         }
       };
 
-      // Run checks frequently for the first few seconds
-      const intervals = [
-        setInterval(forceCorrectPosition, 50), // Every 50ms for first second
-        setTimeout(() => setInterval(forceCorrectPosition, 100), 1000), // Every 100ms for next 2 seconds
-        setTimeout(() => setInterval(forceCorrectPosition, 500), 3000), // Every 500ms after that
-      ];
+      // Run the check every 100ms for exactly 5 seconds
+      const interval = setInterval(forceCorrectPosition, 100);
+      
+      // Clean up after 5 seconds
+      const cleanupTimeout = setTimeout(() => {
+        console.log('🎮 Stopping toris position enforcement after 5 seconds');
+        clearInterval(interval);
+      }, 5000);
 
-      // Cleanup intervals and listeners
+      // Cleanup function to clear everything if we leave the map early
       return () => {
-        intervals.forEach(interval => clearInterval(interval));
-        window.removeEventListener('reset-player-state', handleResetPlayer);
+        console.log('🎮 Cleaning up toris position enforcement');
+        clearInterval(interval);
+        clearTimeout(cleanupTimeout);
       };
     }
-  }, [currentMap, camera]);
+  }, [currentMap]);
 
   // Listen for trigger-teleport event from mobile slideshows for full teleport experience
   useEffect(() => {

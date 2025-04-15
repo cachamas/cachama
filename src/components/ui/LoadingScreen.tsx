@@ -5,6 +5,7 @@ import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { GLTF, GLTFLoader } from 'three-stdlib';
 import './LoadingScreen.css';
+import { preloadViewmodelImages } from '../../utils/viewmodelPreloader';
 
 interface LoadingScreenProps {
   videoSrc: string;
@@ -45,6 +46,9 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
 
       let isGameInitialized = false;
       let areModelsLoaded = false;
+
+      // Start viewmodel preloading immediately
+      preloadViewmodelImages();
 
       // Function to check if we can show continue
       const checkShowContinue = () => {

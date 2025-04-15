@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { debugLog } from '../../stores/debugStore';
+import { isViewmodelPreloaded } from '../../utils/viewmodelPreloader';
 
 interface ViewmodelOverlayProps {
   isMoving: boolean;
@@ -20,21 +21,11 @@ export default function ViewmodelOverlay({ isMoving, showDebug = false }: Viewmo
   const animationFrameId = useRef<number | null>(null);
   const { camera } = useThree();
 
-  // Preload images
+  // Check if viewmodel images are preloaded
   useEffect(() => {
-    const imagesToPreload = [
-      '/images/viewmodel/viewmodel1.webp',
-      '/images/viewmodel/drink1.webp',
-      '/images/viewmodel/drink2.webp',
-      '/images/viewmodel/throw1.webp',
-      '/images/viewmodel/throw2.webp'
-    ];
-    
-    imagesToPreload.forEach(src => {
-      const img = new Image();
-      img.src = src;
-      console.log(`🔫 Preloading image: ${src}`);
-    });
+    if (!isViewmodelPreloaded()) {
+      debugLog('ViewmodelOverlay', 'Images not preloaded yet');
+    }
   }, []);
 
   // Handle mouse movement for sway effect

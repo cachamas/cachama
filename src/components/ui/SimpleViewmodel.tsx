@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
+import { isViewmodelPreloaded } from '../../utils/viewmodelPreloader';
+import { debugLog } from '../../stores/debugStore';
 
 interface AnimationState {
   walk: { x: number; y: number };
@@ -29,6 +31,13 @@ export default function SimpleViewmodel() {
   const [preventThrow, setPreventThrow] = useState(false);
   const [hoveredObject, setHoveredObject] = useState<any>(null);
   
+  // Check if viewmodel images are preloaded
+  useEffect(() => {
+    if (!isViewmodelPreloaded()) {
+      debugLog('SimpleViewmodel', 'Images not preloaded yet');
+    }
+  }, []);
+
   // Update viewport size
   useEffect(() => {
     function updateSize() {

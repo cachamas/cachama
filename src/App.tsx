@@ -187,6 +187,8 @@ export default function App() {
   const [lookY, setLookY] = useState(0);
   const [actionLog, setActionLog] = useState<string[]>([]);
   const { currentMap } = useMapStore();
+  const [showMapInstruction, setShowMapInstruction] = useState(false);
+  const mapInstructionTimeout = useRef<NodeJS.Timeout | null>(null);
   
   // Basic mobile detection and map handling
   useEffect(() => {
@@ -706,6 +708,27 @@ export default function App() {
     }
   }, []);
 
+  // Show map instruction after 3 seconds
+  useEffect(() => {
+    if (!mobileControls.controls.isMobile && isGameStarted) {
+      const timer = setTimeout(() => {
+        setShowMapInstruction(true);
+        
+        // Hide after 5 seconds
+        mapInstructionTimeout.current = setTimeout(() => {
+          setShowMapInstruction(false);
+        }, 5000);
+      }, 3000);
+      
+      return () => {
+        clearTimeout(timer);
+        if (mapInstructionTimeout.current) {
+          clearTimeout(mapInstructionTimeout.current);
+        }
+      };
+    }
+  }, [isGameStarted, mobileControls.controls.isMobile]);
+
   return (
     <>
       {isLoading && (
@@ -765,6 +788,15 @@ export default function App() {
         <DebugOverlay filterEnabled={filterEnabled} />
         <SimpleViewmodel />
         <DebugConsole />
+        
+        {/* Map instruction */}
+        {showMapInstruction && (
+          <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 
+                         text-white text-2xl font-bytebounce bg-black/60 px-4 py-2 rounded-none
+                         pointer-events-none z-[100005] animate-fade-in-out">
+            Press 'M' to open map.
+          </div>
+        )}
         
         {/* Mobile Controls */}
         {mobileControls.controls.isMobile && mobileAppReady && (

@@ -142,6 +142,9 @@ const MobileMapSlideshow = () => {
   // Show toggle button based on explicit map checks and mobile detection
   const showToggleButton = isValidMap && !isCentralMap && !isGCTMap && !isGalleryMap && !isMusicMap && !isOverworldMap && isMobileDevice();
   
+  // Show BTR map button in central, music, and overworld maps
+  const showBTRButton = (isCentralMap || isMusicMap || isOverworldMap) && isMobileDevice();
+  
   // Force re-render periodically to ensure controls stay visible on mobile
   useEffect(() => {
     if (isMobileDevice() && (isGCTMap || isGalleryMap) && isSlideShowOpen) {
@@ -173,7 +176,7 @@ const MobileMapSlideshow = () => {
 
   // Find and store the BTR map object reference
   useEffect(() => {
-    if (isCentralMap) {
+    if (isCentralMap || isMusicMap || isOverworldMap) {
       // Find the Plane__0024 object in the scene
       const findBTRObject = () => {
         const scene = document.querySelector('canvas')?.parentElement;
@@ -198,7 +201,7 @@ const MobileMapSlideshow = () => {
 
       findBTRObject();
     }
-  }, [isCentralMap]);
+  }, [isCentralMap, isMusicMap, isOverworldMap]);
 
   // Create and show artwork - updated to handle both GCT and Gallery artworks
   const createAndShowArtwork = useCallback((index: number, isGallery = false) => {
@@ -454,7 +457,7 @@ const MobileMapSlideshow = () => {
   
   // New function to handle magnifying glass button click specifically for BTR map in central
   const handleBTRButtonClick = useCallback(() => {
-    console.log('🗺️ BTR Map button clicked in central map');
+    console.log('🗺️ BTR Map button clicked');
     
     // Exit pointer lock if needed
     if (document.pointerLockElement) {
@@ -468,16 +471,16 @@ const MobileMapSlideshow = () => {
     };
     
     // Set selected object and show info
-    window.dispatchEvent(new CustomEvent('show-btr-map', {
-      detail: {
-        object: synthObject
-      }
-    }));
+    setSelectedObject(synthObject);
+    setShowInfo(true);
     
     // Set flags to indicate map is open
     document.body.setAttribute('data-map-open', 'true');
     window.__btrMapOpen = true;
-  }, [btrObject]);
+    
+    // Signal that an interactable is open
+    window.dispatchEvent(new CustomEvent('interactable-opened'));
+  }, [btrObject, setSelectedObject, setShowInfo]);
 
   // Handle GCT gallery button click
   const handleGCTGalleryButtonClick = useCallback(() => {
@@ -555,8 +558,8 @@ const MobileMapSlideshow = () => {
 
   return (
     <>
-      {/* BTR Map button - only in central map and on mobile */}
-      {isCentralMap && isMobileDevice() && (
+      {/* BTR Map button - in central, music, and overworld maps on mobile */}
+      {showBTRButton && (
         <button 
           onClick={handleBTRButtonClick}
           className="fixed top-4 right-4 w-16 h-16 flex items-center justify-center bg-black/40 rounded-full active:opacity-80 hover:opacity-90 touch-manipulation shadow-lg border-2 border-white/50 z-[999999]"
@@ -573,8 +576,8 @@ const MobileMapSlideshow = () => {
           }}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            <circle cx="12" cy="12" r="10"></circle>
+            <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
           </svg>
         </button>
       )}
