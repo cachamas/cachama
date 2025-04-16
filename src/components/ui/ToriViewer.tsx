@@ -49,7 +49,10 @@ function ToriModel({ variant, onLoadProgress }: ToriModelProps) {
 
   // Function to get folder number from variant
   const getFolderNumber = (variant: string): string => {
-    switch (variant) {
+    if (!variant) return '1'; // Default folder if variant is undefined
+    
+    const normalizedVariant = variant.toUpperCase().trim();
+    switch (normalizedVariant) {
       case 'TNPR0-100': return '1';
       case 'THE FLAYED ONE': return '2';
       case 'GOJO': return '3';
@@ -65,7 +68,7 @@ function ToriModel({ variant, onLoadProgress }: ToriModelProps) {
       case 'ABADDON': return '13';
       case 'THUNDER GOD': return '14';
       case 'OLIVA': return '15';
-      case 'Y-M3 v1': return '16';
+      case 'Y-M3 V1': return '16';
       case 'HELLRAISER II': return '17';
       case 'SAGE': return '18';
       case 'KITSUNE': return '19';
@@ -103,6 +106,8 @@ function ToriModel({ variant, onLoadProgress }: ToriModelProps) {
 
   // Function to load a single texture
   const loadTextureForMesh = async (mesh: THREE.Mesh): Promise<THREE.Texture | null> => {
+    if (!mesh || !mesh.name) return null;
+    
     const cleanName = mesh.name.slice(0, -3);
     const folderNumber = getFolderNumber(variant);
     console.log('Loading textures for variant:', variant, 'from folder:', folderNumber);

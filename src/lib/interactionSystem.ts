@@ -1221,10 +1221,10 @@ export function getObjectInfo(name: string): InteractableInfo {
     };
   }
 
-  // If no match found, return default
+  // Default case - return a safe default object
   return {
-    title: 'Object',
-    description: 'An interactable object',
+    title: 'Unknown Object',
+    description: 'No information available',
     showViewer: false
   };
 } 
