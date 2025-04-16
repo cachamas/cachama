@@ -395,7 +395,7 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
     };
 
     document.addEventListener('click', handleClick);
-    document.addEventListener('touchstart', handleClick);
+    document.addEventListener('touchstart', handleClick, { passive: false });
     return () => {
       document.removeEventListener('click', handleClick);
       document.removeEventListener('touchstart', handleClick);
@@ -579,12 +579,28 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
     }
   }, [isIOS, isIntroVideo, showIntroText]);
 
+  useEffect(() => {
+    const handleTouch = (e: TouchEvent) => {
+      if (isIOS && isIntroVideo && showIntroText && !preventSkip) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('🎮 iOS: Touch detected on intro screen');
+        handlePortfolioActivation();
+      }
+    };
+
+    document.addEventListener('touchstart', handleTouch, { passive: false });
+    return () => {
+      document.removeEventListener('touchstart', handleTouch);
+    };
+  }, [isIOS, isIntroVideo, showIntroText, preventSkip]);
+
   return (
     <div 
       className="loading-screen" 
       style={{ 
         pointerEvents: 'auto', 
-        touchAction: 'none',
+        touchAction: 'manipulation',
         WebkitTouchCallout: 'none',
         WebkitUserSelect: 'none',
         userSelect: 'none'
@@ -644,7 +660,7 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
           className="absolute inset-0 flex items-center justify-center"
           style={{ 
             pointerEvents: 'auto', 
-            touchAction: 'none',
+            touchAction: 'manipulation',
             zIndex: 20 
           }}
           onClick={isIOS ? undefined : handleIntroClick}

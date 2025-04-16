@@ -613,7 +613,7 @@ export default function World({ ...props }: WorldProps) {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'e' || e.key === 'E') {
         handleClick();
-      } else if (e.key === 'm' || e.key === 'M') {
+      } else if ((e.key === 'm' || e.key === 'M') && currentMap !== 'music') {
         // Check if map is already open
         const isMapOpen = document.body.getAttribute('data-map-open') === 'true' || window.__btrMapOpen;
         
