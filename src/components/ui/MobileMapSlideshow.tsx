@@ -142,8 +142,8 @@ const MobileMapSlideshow = () => {
   // Show toggle button based on explicit map checks and mobile detection
   const showToggleButton = isValidMap && !isCentralMap && !isGCTMap && !isGalleryMap && !isMusicMap && !isOverworldMap && isMobileDevice();
   
-  // Show BTR map button in central, music, and overworld maps
-  const showBTRButton = (isCentralMap || isMusicMap || isOverworldMap) && isMobileDevice();
+  // Show BTR map button in central and overworld maps
+  const showBTRButton = (isCentralMap || isOverworldMap) && isMobileDevice();
   
   // Force re-render periodically to ensure controls stay visible on mobile
   useEffect(() => {

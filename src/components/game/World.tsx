@@ -52,7 +52,7 @@ const RETURN_TO_CENTRAL_SPAWN_POINTS = {
     rotation: [15.30, 134.82 + 180, 0]
   },
   gct: {
-    position: [3.31, -1.24, -61.08],
+    position: [3.31, -1.32, -61.08],
     rotation: [17.82, 179.85 + 180, 0]
   }
 } as const;

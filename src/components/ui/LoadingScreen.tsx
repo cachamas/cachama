@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useAudioStore } from '@/stores/audioStore';
 import { useGLTF } from '@react-three/drei';
@@ -517,100 +517,67 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
     }
   }, [isMuted, isIntroVideo]);
 
-  // Enhanced iOS interaction handler
+  // Simplified iOS video initialization
   useEffect(() => {
-    if (isIOS) {
-      const handleIOSInteraction = async (e: TouchEvent) => {
-        e.preventDefault();
-        
-        // Handle initial interaction
-        if (!hasIOSInteracted) {
-          setHasIOSInteracted(true);
-          console.log('🎮 iOS: Initial interaction detected');
-          
-          // Initialize audio context
-          const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-          const audioContext = new AudioContext();
-          
-          if (audioContext.state === 'suspended') {
-            try {
-              await audioContext.resume();
-              console.log('🎮 iOS: Audio context resumed');
-            } catch (err) {
-              console.error('🎮 iOS: Audio context resume error:', err);
-            }
-          }
-          
-          // Handle video playback
-          if (videoRef.current && !isIOSVideoPlaying) {
-            try {
-              videoRef.current.muted = true; // Ensure muted for autoplay
-              await videoRef.current.play();
-              setIsIOSVideoPlaying(true);
-              console.log('🎮 iOS: Video playback started');
-              
-              // Show intro text after a delay
-              setTimeout(() => {
-                setShowIntroText(true);
-                setShowIOSContinue(true);
-              }, 2000);
-            } catch (err) {
-              console.error('🎮 iOS: Video play error:', err);
-            }
-          }
-        }
-      };
-
-      // Add touch event listeners with passive: false to prevent scrolling
-      document.addEventListener('touchstart', handleIOSInteraction, { passive: false });
-      document.addEventListener('touchend', (e) => e.preventDefault(), { passive: false });
-
-      return () => {
-        document.removeEventListener('touchstart', handleIOSInteraction);
-        document.removeEventListener('touchend', (e) => e.preventDefault());
-      };
-    }
-  }, [isIOS, hasIOSInteracted, isIOSVideoPlaying]);
-
-  // Enhanced video initialization for iOS
-  useEffect(() => {
-    if (videoRef.current) {
-      // Set initial video state
-      videoRef.current.muted = true; // Always start muted on iOS
-      videoRef.current.volume = 1.0;
+    if (videoRef.current && isIOS) {
+      const video = videoRef.current;
+      video.muted = true;
+      video.playsInline = true;
+      video.setAttribute('playsinline', '');
+      video.setAttribute('webkit-playsinline', '');
       
-      // Add iOS-specific attributes
-      videoRef.current.setAttribute('playsinline', '');
-      videoRef.current.setAttribute('webkit-playsinline', '');
-      videoRef.current.setAttribute('x-webkit-airplay', 'allow');
-      
-      // Force preload
-      videoRef.current.preload = 'auto';
-      videoRef.current.load();
+      // Show intro text after a delay for iOS
+      if (isIntroVideo) {
+        setTimeout(() => {
+          setShowIntroText(true);
+          setShowLoadingGif(false);
+        }, 1000);
+      }
 
-      const handleCanPlay = () => {
-        setIsVideoReady(true);
-        setShowLoadingGif(false);
-        console.log('🎮 iOS: Video can play');
-      };
-
-      const handleVideoEnd = () => {
-        if (!isIntroVideo) {
-          playMusic();
+      // Attempt to play the video
+      const playVideo = async () => {
+        try {
+          await video.play();
+          console.log('🎮 iOS: Video playing successfully');
+        } catch (err) {
+          console.error('🎮 iOS: Video play error:', err);
         }
       };
 
-      videoRef.current.addEventListener('canplay', handleCanPlay);
-      videoRef.current.addEventListener('ended', handleVideoEnd);
-
-      return () => {
-        if (videoRef.current) {
-          videoRef.current.removeEventListener('canplay', handleCanPlay);
-          videoRef.current.removeEventListener('ended', handleVideoEnd);
-        }
-      };
+      playVideo();
     }
-  }, [isIOS, isIntroVideo, playMusic]);
+  }, [isIOS, isIntroVideo]);
+
+  // Simplified iOS touch handler
+  const handleIOSTouch = useCallback(async (e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (isIOS && isIntroVideo && showIntroText) {
+      console.log('🎮 iOS: Portfolio text touched');
+      
+      // Start loading the central map
+      setShowLoadingBar(true);
+      const gltfLoader = new GLTFLoader();
+      gltfLoader.load('/models/central.glb', 
+        () => {
+          setProgress(1);
+          setShowLoadingBar(false);
+          handlePortfolioActivation();
+        },
+        (xhr) => {
+          if (xhr.lengthComputable) {
+            setProgress(xhr.loaded / xhr.total);
+          }
+        },
+        (error) => {
+          console.error('Error loading central map:', error);
+          setShowLoadingBar(false);
+          handlePortfolioActivation();
+        }
+      );
+    }
+  }, [isIOS, isIntroVideo, showIntroText]);
 
   return (
     <div 
@@ -648,12 +615,13 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
           />
         </div>
       )}
+      
       <video
         ref={videoRef}
         src={`/videos/${videoSrc}`}
         autoPlay
         playsInline
-        muted={true}
+        muted
         loop={isIntroVideo}
         preload="auto"
         style={{ 
@@ -665,16 +633,64 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
           height: '100%',
           touchAction: 'none'
         }}
-        onError={(e) => console.error('Video loading error:', e)}
-        onCanPlay={() => {
+        onLoadedData={() => {
           setIsVideoReady(true);
           setShowLoadingGif(false);
-          if (isIOS && videoRef.current) {
-            videoRef.current.play().catch(console.error);
-          }
         }}
       />
-      
+
+      {isIntroVideo && !preventSkip && (
+        <div 
+          className="absolute inset-0 flex items-center justify-center"
+          style={{ 
+            pointerEvents: 'auto', 
+            touchAction: 'none',
+            zIndex: 20 
+          }}
+          onClick={isIOS ? undefined : handleIntroClick}
+          onTouchStart={isIOS ? handleIOSTouch : undefined}
+        >
+          {showIntroText && (
+            <motion.div 
+              className="pixel-font text-center flex flex-col items-center justify-center"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 1, ease: "easeOut" }}
+              style={{ 
+                color: 'white',
+                textShadow: '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000',
+                padding: '20px',
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+                WebkitTouchCallout: 'none',
+                width: '400px',
+                height: '150px',
+                whiteSpace: 'nowrap',
+                position: 'absolute',
+                left: '50%',
+                top: '50%',
+                transform: 'translate(-50%, -50%)',
+                pointerEvents: 'auto',
+                touchAction: 'manipulation'
+              }}
+            >
+              <div className="text-4xl">PORTFOLIO</div>
+              <div className="text-2xl mt-1">
+                <img 
+                  src="/images/cursor.webp" 
+                  alt="Click to continue" 
+                  className="w-16 h-16 mx-auto"
+                  style={{ 
+                    imageRendering: 'pixelated',
+                    pointerEvents: 'none'
+                  }}
+                />
+              </div>
+            </motion.div>
+          )}
+        </div>
+      )}
+
       {!isIntroVideo && (
         <div className="loading-overlay" style={{ pointerEvents: 'auto', touchAction: 'none' }}>
           <div style={{
@@ -753,49 +769,6 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
               }}
             />
           </div>
-        </div>
-      )}
-
-      {isIntroVideo && !preventSkip && (
-        <div 
-          className="absolute inset-0 flex items-center justify-center"
-          style={{ pointerEvents: 'auto', touchAction: 'none' }}
-          onClick={handleIntroClick}
-          onTouchStart={handleIntroClick}
-        >
-          {showIntroText && (
-            <motion.div 
-              className="pixel-font text-center flex flex-col items-center justify-center pointer-events-none"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 1, ease: "easeOut" }}
-              style={{ 
-                color: 'white',
-                textShadow: '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000',
-                padding: '20px',
-                userSelect: 'none',
-                WebkitUserSelect: 'none',
-                WebkitTouchCallout: 'none',
-                width: '400px',
-                height: '150px',
-                whiteSpace: 'nowrap',
-                position: 'absolute',
-                left: '50%',
-                top: '50%',
-                transform: 'translate(-50%, -50%)'
-              }}
-            >
-              <div className="text-4xl">PORTFOLIO</div>
-              <div className="text-2xl mt-1">
-                <img 
-                  src="/images/cursor.webp" 
-                  alt="Click to continue" 
-                  className="w-16 h-16 mx-auto"
-                  style={{ imageRendering: 'pixelated' }}
-                />
-              </div>
-            </motion.div>
-          )}
         </div>
       )}
     </div>
