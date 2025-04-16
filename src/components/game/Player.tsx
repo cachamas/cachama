@@ -119,7 +119,7 @@ const INITIAL_SPAWN_POINTS: Record<string, SpawnPoint> = {
     default: { x: 25.84, y: 267.47 }
   },
   gallery: {
-    position: [5.10, 4.0, 57.96],
+    position: [5.10, 8.0, 57.96],
     default: { x: 6.99, y: 71.63 }
   },
   music: {
@@ -139,19 +139,19 @@ const INITIAL_SPAWN_POINTS: Record<string, SpawnPoint> = {
 // Return spawn points when coming back to central from other maps
 const RETURN_TO_CENTRAL_SPAWN_POINTS: Record<string, ReturnSpawnPoint> = {
   gallery: {
-    position: [4.70, -1.32, 61.82],
+    position: [4.70, 8.32, 61.82],
     rotation: [21.66, 0.75 + 180, 0]
   },
   music: {
-    position: [90.33, -1.31, 0.17],
+    position: [90.33, 3.31, 0.17],
     rotation: [17.02, 89.96 + 180, 0]
   },
   toris: {
-    position: [71.16, -2.57, -66.73],
+    position: [71.16, 3.57, -66.73],
     rotation: [15.30, 134.82 + 180, 0]
   },
   gct: {
-    position: [3.31, -1.24, -61.08],
+    position: [3.31, 8.24, -61.08],
     rotation: [17.82, 179.85 + 180, 0]
   }
 };

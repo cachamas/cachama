@@ -21,7 +21,6 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
   const [progress, setProgress] = useState(0);
   const [showIntroText, setShowIntroText] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
-  const [showUnmuteButton, setShowUnmuteButton] = useState(false);
   const [showLoadingBar, setShowLoadingBar] = useState(false);
   const [mousePosition, setMousePosition] = useState({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -199,7 +198,7 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
   // Handle video audio and music
   useEffect(() => {
     if (videoRef.current) {
-      // Only mute for intro video until user interaction
+      // Always start muted for intro video
       videoRef.current.muted = isIntroVideo;
       videoRef.current.volume = 1.0;
       
@@ -211,21 +210,8 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
         (videoRef.current as any).playbackQuality = 'auto';
       }
       
-      // Force load and play the video immediately
+      // Force load the video
       videoRef.current.load();
-      
-      // More aggressive play attempt with retry mechanism
-      const attemptPlay = () => {
-        videoRef.current?.play().catch(error => {
-          console.log("Video autoplay failed, retrying:", error);
-          // For non-intro videos or after user interaction, retry with sound
-          if (!isIntroVideo || !isMuted) {
-            setTimeout(attemptPlay, 500);
-          }
-        });
-      };
-      
-      attemptPlay();
 
       const handleVideoEnd = () => {
         if (!isIntroVideo) {
@@ -234,18 +220,10 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
       };
 
       videoRef.current.addEventListener('ended', handleVideoEnd);
-      
-      // Add canplay handler to ensure video plays when ready
-      const handleCanPlay = () => {
-        attemptPlay();
-      };
-      
-      videoRef.current.addEventListener('canplay', handleCanPlay);
 
       return () => {
         if (videoRef.current) {
           videoRef.current.removeEventListener('ended', handleVideoEnd);
-          videoRef.current.removeEventListener('canplay', handleCanPlay);
         }
         if (!isIntroVideo && !isLoading) {
           playMusic();
@@ -332,31 +310,16 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
     }
   }, [videoSrc, isIntroVideo]);
 
-  // Show intro text after unmute
+  // Show intro text after 3 seconds of video playing
   useEffect(() => {
-    if (isIntroVideo && !isMuted) {
-      setShowIntroText(false);
+    if (isIntroVideo && videoRef.current) {
+      const timer = setTimeout(() => {
+        setShowIntroText(true);
+      }, 2000);
+
+      return () => clearTimeout(timer);
     }
-  }, [isIntroVideo, isMuted]);
-
-  // Show unmute button after video starts playing
-  useEffect(() => {
-    if (isIntroVideo && isMuted) {
-      const handlePlay = () => {
-        setShowUnmuteButton(true);
-      };
-
-      if (videoRef.current) {
-        videoRef.current.addEventListener('playing', handlePlay);
-      }
-
-      return () => {
-        if (videoRef.current) {
-          videoRef.current.removeEventListener('playing', handlePlay);
-        }
-      };
-    }
-  }, [isIntroVideo, isMuted]);
+  }, [isIntroVideo]);
 
   // Show loading bar after unmute
   useEffect(() => {
@@ -369,7 +332,6 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
         () => {
           setProgress(1);
           setShowLoadingBar(false);
-          setShowIntroText(true);
         },
         // onProgress
         (xhr) => {
@@ -381,7 +343,6 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
         (error) => {
           console.error('Error loading central map:', error);
           setShowLoadingBar(false);
-          setShowIntroText(true);
         }
       );
     }
@@ -391,15 +352,44 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
   const handleIntroClick = (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (isIntroVideo && showIntroText && !preventSkip) {
-      handlePortfolioActivation();
+    if (isIntroVideo && !preventSkip) {
+      // Simply unmute the video if it's muted
+      if (videoRef.current && isMuted) {
+        videoRef.current.muted = false;
+        videoRef.current.volume = 1.0;
+        setIsMuted(false);
+      }
+      
+      // Start loading the central map
+      setShowLoadingBar(true);
+      const gltfLoader = new GLTFLoader();
+      gltfLoader.load('/models/central.glb', 
+        // onLoad
+        () => {
+          setProgress(1);
+          setShowLoadingBar(false);
+          handlePortfolioActivation();
+        },
+        // onProgress
+        (xhr) => {
+          if (xhr.lengthComputable) {
+            setProgress(xhr.loaded / xhr.total);
+          }
+        },
+        // onError
+        (error) => {
+          console.error('Error loading central map:', error);
+          setShowLoadingBar(false);
+          handlePortfolioActivation();
+        }
+      );
     }
   };
 
   // Handle any click when pointer is locked
   useEffect(() => {
     const handleClick = (e: MouseEvent | TouchEvent) => {
-      if (!isIntroVideo || !showIntroText || preventSkip || isMuted) return;
+      if (!isIntroVideo || preventSkip || isMuted) return;
       handlePortfolioActivation();
     };
 
@@ -409,7 +399,7 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
       document.removeEventListener('click', handleClick);
       document.removeEventListener('touchstart', handleClick);
     };
-  }, [isIntroVideo, showIntroText, preventSkip, isMuted]);
+  }, [isIntroVideo, preventSkip, isMuted]);
 
   // Centralized function to handle portfolio activation
   const handlePortfolioActivation = () => {
@@ -476,50 +466,6 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
       window.removeEventListener('mousedown', handleClick);
     };
   }, [canContinue, onLoadComplete, isIntroVideo, playMusic, preventSkip]);
-
-  const handleUnmute = (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (videoRef.current && isMuted) {
-      // Store current time and playback state
-      const currentTime = videoRef.current.currentTime;
-      const wasPlaying = !videoRef.current.paused;
-      
-      // First unmute
-      videoRef.current.muted = false;
-      videoRef.current.volume = 1.0;
-      
-      // Update state immediately
-      setIsMuted(false);
-      
-      // Restore the current time and playback state
-      videoRef.current.currentTime = currentTime;
-      
-      // Only call play() if the video was playing and is now paused
-      if (wasPlaying && videoRef.current.paused) {
-        videoRef.current.play().catch(err => {
-          console.log("Play after unmute failed:", err);
-        });
-      }
-      
-      // For iOS, show continue button after a small delay
-      if (isIOS) {
-        setTimeout(() => {
-          setShowIOSContinue(true);
-        }, 250);
-      }
-      
-      // Begin preloading the central map in the background
-      const centralVideo = document.createElement('video');
-      centralVideo.src = '/videos/central.mp4';
-      centralVideo.preload = 'auto';
-      centralVideo.muted = true;
-      centralVideo.load();
-      
-      // Store reference to prevent garbage collection
-      (window as any).__preloadedCentralVideo = centralVideo;
-    }
-  };
 
   // Preload first song and BTR map assets after unmuting
   useEffect(() => {
@@ -592,22 +538,16 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
                   console.log('iOS video play error:', err);
                 });
               }
-              // Show continue button after a short delay
-              setTimeout(() => {
-                setShowIOSContinue(true);
-              }, 500);
             });
           }
         }
       };
 
-      // Add touch event listeners
+      // Add touch event listener
       document.addEventListener('touchstart', handleIOSInteraction, { passive: false });
-      document.addEventListener('touchend', handleIOSInteraction, { passive: false });
 
       return () => {
         document.removeEventListener('touchstart', handleIOSInteraction);
-        document.removeEventListener('touchend', handleIOSInteraction);
       };
     }
   }, [isIOS, hasIOSInteracted]);
@@ -623,24 +563,27 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
       videoRef.current.setAttribute('playsinline', '');
       videoRef.current.setAttribute('webkit-playsinline', '');
       
-      // Force load and play the video immediately
+      // Force load the video
       videoRef.current.load();
-      
-      const attemptPlay = () => {
-        videoRef.current?.play().catch(error => {
-          console.log("Video autoplay failed, retrying:", error);
-          if (!isIntroVideo || !isMuted) {
-            setTimeout(attemptPlay, 500);
-          }
-        });
+
+      const handleVideoEnd = () => {
+        if (!isIntroVideo) {
+          playMusic();
+        }
       };
-      
-      // For iOS, only attempt play after interaction
-      if (!isIOS || hasIOSInteracted) {
-        attemptPlay();
-      }
+
+      videoRef.current.addEventListener('ended', handleVideoEnd);
+
+      return () => {
+        if (videoRef.current) {
+          videoRef.current.removeEventListener('ended', handleVideoEnd);
+        }
+        if (!isIntroVideo && !isLoading) {
+          playMusic();
+        }
+      };
     }
-  }, [isIOS, hasIOSInteracted, isIntroVideo, isMuted]);
+  }, [isIOS, hasIOSInteracted, isIntroVideo, isLoading]);
 
   return (
     <div className="loading-screen" style={{ pointerEvents: 'auto', touchAction: 'none' }}>
@@ -685,118 +628,20 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
           height: '100%',
           touchAction: 'none'
         }}
-        onClick={(e) => {
-          e.preventDefault();
-          // Try playing on click (helps with autoplay restrictions)
-          if (videoRef.current && (isIntroVideo || videoRef.current.paused)) {
-            videoRef.current.play().catch(console.error);
-          }
-        }}
         onError={(e) => console.error('Video loading error:', e)}
         onLoadedMetadata={(e) => {
           const video = e.target as HTMLVideoElement;
-          // Try playing as soon as metadata is loaded (earlier than loadedData)
-          video.play().catch(err => console.log("Early play attempt:", err));
-          
-          // Check if this is the central video, prioritize it
-          if (videoSrc === 'central.mp4') {
-            // Set high priority for first map video
-            video.playbackRate = 1.0; // Normal speed
-            
-            // Set normal quality for performance
-            if ('playbackQuality' in video) {
-              (video as any).playbackQuality = 'auto';
-            }
-          }
+          // No play call here, let it play naturally
         }}
         onLoadedData={(e) => {
           const video = e.target as HTMLVideoElement;
           if (!isIntroVideo) {
             video.muted = false;
             video.volume = 1.0;
-            video.play().catch(console.error);
           }
         }}
       />
       
-      {isIntroVideo && isMuted && showUnmuteButton && (
-        <div 
-          className="absolute inset-0 cursor-pointer"
-          onClick={handleUnmute}
-          onTouchStart={handleUnmute}
-          style={{ 
-            userSelect: 'none',
-            pointerEvents: 'auto',
-            zIndex: 50,
-            touchAction: 'none'
-          }}
-        >
-          <motion.div 
-            className="absolute left-1/2 transform -translate-x-1/2"
-            style={{ 
-              top: '70%',
-              opacity: 0
-            }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 2, ease: "easeOut" }}
-          >
-            <img 
-              src="/images/sound.webp" 
-              alt="Unmute"
-              className="w-16 h-16"
-              style={{
-                imageRendering: 'pixelated',
-                pointerEvents: 'none'
-              }}
-            />
-          </motion.div>
-        </div>
-      )}
-
-      {/* iOS-specific continue button - only shown on iOS devices */}
-      {isIOS && showIOSContinue && !isMuted && (
-        <motion.div 
-          className="absolute left-1/2 transform -translate-x-1/2"
-          style={{ 
-            top: '80%',
-            opacity: 0,
-            touchAction: 'none'
-          }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-        >
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              playMusic();
-              onLoadComplete();
-            }}
-            onTouchStart={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              playMusic();
-              onLoadComplete();
-            }}
-            style={{
-              fontFamily: 'bytebounce',
-              textShadow: '0 0 10px rgba(255,255,255,0.5)',
-              touchAction: 'none',
-              userSelect: 'none',
-              WebkitUserSelect: 'none',
-              WebkitTouchCallout: 'none',
-              padding: '12px 24px',
-              fontSize: '1.2rem',
-              backgroundColor: 'rgba(0,0,0,0.5)',
-              border: '2px solid white',
-              borderRadius: '4px'
-            }}
-          >
-            Continue
-          </button>
-        </motion.div>
-      )}
-
       {!isIntroVideo && (
         <div className="loading-overlay" style={{ pointerEvents: 'auto', touchAction: 'none' }}>
           <div style={{
@@ -842,7 +687,11 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
       {isIntroVideo && !isMuted && showLoadingBar && (
         <div 
           className="absolute inset-0 flex items-center justify-center"
-          style={{ pointerEvents: 'none', touchAction: 'none' }}
+          style={{ 
+            pointerEvents: 'none', 
+            touchAction: 'none',
+            zIndex: 10
+          }}
         >
           <div 
             style={{
@@ -853,7 +702,8 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
               imageRendering: 'pixelated',
               boxShadow: '0 0 0 2px black',
               position: 'relative',
-              backgroundColor: 'black'
+              backgroundColor: 'black',
+              opacity: 0.8
             }}
           >
             <motion.div
@@ -873,34 +723,46 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
         </div>
       )}
 
-      {isIntroVideo && showIntroText && !preventSkip && !isMuted && (
+      {isIntroVideo && !preventSkip && (
         <div 
           className="absolute inset-0 flex items-center justify-center"
           style={{ pointerEvents: 'auto', touchAction: 'none' }}
           onClick={handleIntroClick}
           onTouchStart={handleIntroClick}
         >
-          <div 
-            className="pixel-font text-center flex flex-col items-center justify-center pointer-events-none"
-            style={{ 
-              color: 'white',
-              textShadow: '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000',
-              padding: '20px',
-              userSelect: 'none',
-              WebkitUserSelect: 'none',
-              WebkitTouchCallout: 'none',
-              width: '400px',
-              height: '150px',
-              whiteSpace: 'nowrap',
-              position: 'absolute',
-              left: '50%',
-              top: '50%',
-              transform: 'translate(-50%, -50%)'
-            }}
-          >
-            <div className="text-4xl">THIS IS A PORTFOLIO</div>
-            <div className="text-2xl mt-4">CLICK TO CONTINUE</div>
-          </div>
+          {showIntroText && (
+            <motion.div 
+              className="pixel-font text-center flex flex-col items-center justify-center pointer-events-none"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 1, ease: "easeOut" }}
+              style={{ 
+                color: 'white',
+                textShadow: '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000',
+                padding: '20px',
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+                WebkitTouchCallout: 'none',
+                width: '400px',
+                height: '150px',
+                whiteSpace: 'nowrap',
+                position: 'absolute',
+                left: '50%',
+                top: '50%',
+                transform: 'translate(-50%, -50%)'
+              }}
+            >
+              <div className="text-4xl">PORTFOLIO</div>
+              <div className="text-2xl mt-1">
+                <img 
+                  src="/images/cursor.webp" 
+                  alt="Click to continue" 
+                  className="w-16 h-16 mx-auto"
+                  style={{ imageRendering: 'pixelated' }}
+                />
+              </div>
+            </motion.div>
+          )}
         </div>
       )}
     </div>
