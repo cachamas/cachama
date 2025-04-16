@@ -633,21 +633,22 @@ export default function World({ ...props }: WorldProps) {
             }
           }
         } else {
-          // Open the map
-          const btrMap = currentScene.getObjectByName('Plane__0024');
-          if (btrMap) {
-            useInteractionStore.getState().setHoveredObject(btrMap);
-            useInteractionStore.getState().setSelectedObject(btrMap);
-            useInteractionStore.getState().setShowInfo(true);
-            
-            if (document.pointerLockElement) {
-              document.exitPointerLock();
-            }
-            
-            document.body.setAttribute('data-map-open', 'true');
-            window.__btrMapOpen = true;
-            window.dispatchEvent(new CustomEvent('interactable-opened'));
+          // Create a synthetic BTR map object
+          const btrMap = new THREE.Object3D();
+          btrMap.name = 'Plane__0024';
+          
+          // Set selected object and show info
+          useInteractionStore.getState().setHoveredObject(btrMap);
+          useInteractionStore.getState().setSelectedObject(btrMap);
+          useInteractionStore.getState().setShowInfo(true);
+          
+          if (document.pointerLockElement) {
+            document.exitPointerLock();
           }
+          
+          document.body.setAttribute('data-map-open', 'true');
+          window.__btrMapOpen = true;
+          window.dispatchEvent(new CustomEvent('interactable-opened'));
         }
       }
     };
