@@ -35,6 +35,7 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [showLoadingGif, setShowLoadingGif] = useState(true);
   const [hasIOSInteracted, setHasIOSInteracted] = useState(false);
+  const [isIOSVideoPlaying, setIsIOSVideoPlaying] = useState(false);
 
   // Set up loading manager
   useEffect(() => {
@@ -516,55 +517,82 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
     }
   }, [isMuted, isIntroVideo]);
 
-  // Add iOS interaction handler
+  // Enhanced iOS interaction handler
   useEffect(() => {
     if (isIOS) {
-      const handleIOSInteraction = (e: TouchEvent) => {
+      const handleIOSInteraction = async (e: TouchEvent) => {
         e.preventDefault();
+        
+        // Handle initial interaction
         if (!hasIOSInteracted) {
           setHasIOSInteracted(true);
+          console.log('🎮 iOS: Initial interaction detected');
+          
           // Initialize audio context
           const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
           const audioContext = new AudioContext();
           
-          // Resume audio context on first interaction
           if (audioContext.state === 'suspended') {
-            audioContext.resume().then(() => {
-              console.log('Audio context resumed on iOS');
-              // Unmute video and start playing
-              if (videoRef.current) {
-                videoRef.current.muted = false;
-                videoRef.current.play().catch(err => {
-                  console.log('iOS video play error:', err);
-                });
-              }
-            });
+            try {
+              await audioContext.resume();
+              console.log('🎮 iOS: Audio context resumed');
+            } catch (err) {
+              console.error('🎮 iOS: Audio context resume error:', err);
+            }
+          }
+          
+          // Handle video playback
+          if (videoRef.current && !isIOSVideoPlaying) {
+            try {
+              videoRef.current.muted = true; // Ensure muted for autoplay
+              await videoRef.current.play();
+              setIsIOSVideoPlaying(true);
+              console.log('🎮 iOS: Video playback started');
+              
+              // Show intro text after a delay
+              setTimeout(() => {
+                setShowIntroText(true);
+                setShowIOSContinue(true);
+              }, 2000);
+            } catch (err) {
+              console.error('🎮 iOS: Video play error:', err);
+            }
           }
         }
       };
 
-      // Add touch event listener
+      // Add touch event listeners with passive: false to prevent scrolling
       document.addEventListener('touchstart', handleIOSInteraction, { passive: false });
+      document.addEventListener('touchend', (e) => e.preventDefault(), { passive: false });
 
       return () => {
         document.removeEventListener('touchstart', handleIOSInteraction);
+        document.removeEventListener('touchend', (e) => e.preventDefault());
       };
     }
-  }, [isIOS, hasIOSInteracted]);
+  }, [isIOS, hasIOSInteracted, isIOSVideoPlaying]);
 
-  // Modify video initialization for iOS
+  // Enhanced video initialization for iOS
   useEffect(() => {
     if (videoRef.current) {
       // Set initial video state
-      videoRef.current.muted = isIOS ? true : isIntroVideo;
+      videoRef.current.muted = true; // Always start muted on iOS
       videoRef.current.volume = 1.0;
       
-      // Add playsinline attribute for iOS
+      // Add iOS-specific attributes
       videoRef.current.setAttribute('playsinline', '');
       videoRef.current.setAttribute('webkit-playsinline', '');
+      videoRef.current.setAttribute('x-webkit-airplay', 'allow');
       
-      // Force load the video
+      // Force preload
+      videoRef.current.preload = 'auto';
       videoRef.current.load();
+
+      const handleCanPlay = () => {
+        setIsVideoReady(true);
+        setShowLoadingGif(false);
+        console.log('🎮 iOS: Video can play');
+      };
 
       const handleVideoEnd = () => {
         if (!isIntroVideo) {
@@ -572,21 +600,29 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
         }
       };
 
+      videoRef.current.addEventListener('canplay', handleCanPlay);
       videoRef.current.addEventListener('ended', handleVideoEnd);
 
       return () => {
         if (videoRef.current) {
+          videoRef.current.removeEventListener('canplay', handleCanPlay);
           videoRef.current.removeEventListener('ended', handleVideoEnd);
-        }
-        if (!isIntroVideo && !isLoading) {
-          playMusic();
         }
       };
     }
-  }, [isIOS, hasIOSInteracted, isIntroVideo, isLoading]);
+  }, [isIOS, isIntroVideo, playMusic]);
 
   return (
-    <div className="loading-screen" style={{ pointerEvents: 'auto', touchAction: 'none' }}>
+    <div 
+      className="loading-screen" 
+      style={{ 
+        pointerEvents: 'auto', 
+        touchAction: 'none',
+        WebkitTouchCallout: 'none',
+        WebkitUserSelect: 'none',
+        userSelect: 'none'
+      }}
+    >
       {showLoadingGif && (
         <div className="absolute inset-0 flex items-center justify-center z-50">
           <img 
@@ -595,6 +631,7 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
             className={isIntroVideo ? "max-w-[200px] h-auto" : "w-full h-full object-contain"}
             style={{
               imageRendering: 'pixelated',
+              pointerEvents: 'none',
               ...(isIntroVideo ? {} : { 
                 position: 'absolute',
                 top: '50%',
@@ -616,8 +653,8 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
         src={`/videos/${videoSrc}`}
         autoPlay
         playsInline
-        muted={isIntroVideo}
-        loop
+        muted={true}
+        loop={isIntroVideo}
         preload="auto"
         style={{ 
           pointerEvents: 'none',
@@ -629,15 +666,11 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
           touchAction: 'none'
         }}
         onError={(e) => console.error('Video loading error:', e)}
-        onLoadedMetadata={(e) => {
-          const video = e.target as HTMLVideoElement;
-          // No play call here, let it play naturally
-        }}
-        onLoadedData={(e) => {
-          const video = e.target as HTMLVideoElement;
-          if (!isIntroVideo) {
-            video.muted = false;
-            video.volume = 1.0;
+        onCanPlay={() => {
+          setIsVideoReady(true);
+          setShowLoadingGif(false);
+          if (isIOS && videoRef.current) {
+            videoRef.current.play().catch(console.error);
           }
         }}
       />
