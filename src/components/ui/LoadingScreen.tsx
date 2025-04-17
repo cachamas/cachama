@@ -351,9 +351,15 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
 
   // Handle intro text click and pointer lock click
   const handleIntroClick = (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+    // Don't prevent default on iOS to allow native behavior
+    if (!isIOS) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
     if (isIntroVideo && !preventSkip) {
+      console.log('🎮 Touch/click detected on intro screen');
+      
       // Simply unmute the video if it's muted
       if (videoRef.current && isMuted) {
         videoRef.current.muted = false;
@@ -548,10 +554,13 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
     }
   }, [isIOS, isIntroVideo]);
 
-  // Simplified iOS touch handler
+  // Enhanced iOS touch handler
   const handleIOSTouch = useCallback(async (e: React.TouchEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+    // Don't prevent default on iOS to allow native behavior
+    if (!isIOS) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
 
     if (isIOS && isIntroVideo && showIntroText) {
       console.log('🎮 iOS: Portfolio text touched');
@@ -579,19 +588,24 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
     }
   }, [isIOS, isIntroVideo, showIntroText]);
 
+  // Add specific touch event listener for portfolio text
   useEffect(() => {
-    const handleTouch = (e: TouchEvent) => {
+    const portfolioText = document.querySelector('.pixel-font');
+    if (!portfolioText) return;
+
+    const handlePortfolioTouch = (e: TouchEvent) => {
       if (isIOS && isIntroVideo && showIntroText && !preventSkip) {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log('🎮 iOS: Touch detected on intro screen');
+        console.log('🎮 iOS: Touch detected on portfolio text');
         handlePortfolioActivation();
       }
     };
 
-    document.addEventListener('touchstart', handleTouch, { passive: false });
+    portfolioText.addEventListener('touchstart', handlePortfolioTouch, { passive: true });
+    portfolioText.addEventListener('touchend', handlePortfolioTouch, { passive: true });
+
     return () => {
-      document.removeEventListener('touchstart', handleTouch);
+      portfolioText.removeEventListener('touchstart', handlePortfolioTouch);
+      portfolioText.removeEventListener('touchend', handlePortfolioTouch);
     };
   }, [isIOS, isIntroVideo, showIntroText, preventSkip]);
 
@@ -687,7 +701,20 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
                 top: '50%',
                 transform: 'translate(-50%, -50%)',
                 pointerEvents: 'auto',
-                touchAction: 'manipulation'
+                touchAction: 'manipulation',
+                zIndex: 1000,
+                WebkitTapHighlightColor: 'transparent'
+              }}
+              onClick={handleIntroClick}
+              onTouchStart={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleIntroClick(e);
+              }}
+              onTouchEnd={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleIntroClick(e);
               }}
             >
               <div className="text-4xl">PORTFOLIO</div>
