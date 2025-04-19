@@ -533,42 +533,10 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
   // Simplified iOS/WebKit video initialization
   useEffect(() => {
     if (shouldAutoLoad) {
-      // Start loading immediately for iOS/WebKit
-      if (isIntroVideo) {
-        setShowLoadingBar(true);
-        const gltfLoader = new GLTFLoader();
-        gltfLoader.load('/models/central.glb', 
-          () => {
-            setProgress(1);
-            setShowLoadingBar(false);
-            handlePortfolioActivation();
-          },
-          (xhr) => {
-            if (xhr.lengthComputable) {
-              setProgress(xhr.loaded / xhr.total);
-            }
-          },
-          (error) => {
-            console.error('Error loading central map:', error);
-            setShowLoadingBar(false);
-            handlePortfolioActivation();
-          }
-        );
-      }
-
-      // Set up video if we have a ref
-      if (videoRef.current) {
-        const video = videoRef.current;
-        video.muted = true;
-        video.playsInline = true;
-        video.setAttribute('playsinline', '');
-        video.setAttribute('webkit-playsinline', '');
-        
-        // Try to play the video but don't wait for it
-        video.play().catch(console.error);
-      }
+      console.log('🎮 iOS/WebKit detected - bypassing loading sequence');
+      handlePortfolioActivation();
     }
-  }, [shouldAutoLoad, isIntroVideo]);
+  }, [shouldAutoLoad]);
 
   // Remove video ready state dependency
   useEffect(() => {
@@ -634,10 +602,11 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
         touchAction: 'manipulation',
         WebkitTouchCallout: 'none',
         WebkitUserSelect: 'none',
-        userSelect: 'none'
+        userSelect: 'none',
+        display: shouldAutoLoad ? 'none' : 'flex'
       }}
     >
-      {showLoadingGif && (
+      {!shouldAutoLoad && showLoadingGif && (
         <div className="absolute inset-0 flex items-center justify-center z-50">
           <img 
             src={isIntroVideo ? "/images/introgif.gif" : "/images/vv.gif"} 
@@ -663,26 +632,28 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
         </div>
       )}
       
-      <video
-        ref={videoRef}
-        src={`/videos/${videoSrc}`}
-        autoPlay
-        playsInline
-        muted
-        loop={isIntroVideo}
-        preload="auto"
-        style={{ 
-          pointerEvents: 'none',
-          opacity: 1,
-          visibility: 'visible',
-          objectFit: 'cover',
-          width: '100%',
-          height: '100%',
-          touchAction: 'none'
-        }}
-      />
+      {!shouldAutoLoad && (
+        <video
+          ref={videoRef}
+          src={`/videos/${videoSrc}`}
+          autoPlay
+          playsInline
+          muted
+          loop={isIntroVideo}
+          preload="auto"
+          style={{ 
+            pointerEvents: 'none',
+            opacity: 1,
+            visibility: 'visible',
+            objectFit: 'cover',
+            width: '100%',
+            height: '100%',
+            touchAction: 'none'
+          }}
+        />
+      )}
 
-      {isIntroVideo && !preventSkip && !shouldAutoLoad && (
+      {!shouldAutoLoad && isIntroVideo && !preventSkip && (
         <div 
           className="absolute inset-0 flex items-center justify-center"
           style={{ 
