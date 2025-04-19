@@ -61,13 +61,18 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
           setTimeout(() => {
             console.log('🎮 Setting canContinue to true');
             setCanContinue(true);
-            // Trigger forward motion when continue text appears
-            const forwardEvent = new KeyboardEvent('keydown', { code: 'KeyW' });
-            window.dispatchEvent(forwardEvent);
-            setTimeout(() => {
-              const forwardUpEvent = new KeyboardEvent('keyup', { code: 'KeyW' });
-              window.dispatchEvent(forwardUpEvent);
-            }, 100);
+            // For iOS/WebKit, immediately trigger the game start
+            if (shouldAutoLoad) {
+              handlePortfolioActivation();
+            } else {
+              // Trigger forward motion when continue text appears
+              const forwardEvent = new KeyboardEvent('keydown', { code: 'KeyW' });
+              window.dispatchEvent(forwardEvent);
+              setTimeout(() => {
+                const forwardUpEvent = new KeyboardEvent('keyup', { code: 'KeyW' });
+                window.dispatchEvent(forwardUpEvent);
+              }, 100);
+            }
           }, 2000);
         }
       };
@@ -527,67 +532,48 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
 
   // Simplified iOS/WebKit video initialization
   useEffect(() => {
-    if (videoRef.current && shouldAutoLoad) {
-      const video = videoRef.current;
-      video.muted = true;
-      video.playsInline = true;
-      video.setAttribute('playsinline', '');
-      video.setAttribute('webkit-playsinline', '');
-      
-      // Show intro text after a delay for iOS/WebKit
+    if (shouldAutoLoad) {
+      // Start loading immediately for iOS/WebKit
       if (isIntroVideo) {
-        setTimeout(() => {
-          setShowIntroText(true);
-          setShowLoadingGif(false);
-          
-          // Start loading automatically
-          setShowLoadingBar(true);
-          const gltfLoader = new GLTFLoader();
-          gltfLoader.load('/models/central.glb', 
-            () => {
-              setProgress(1);
-              setShowLoadingBar(false);
-              handlePortfolioActivation();
-            },
-            (xhr) => {
-              if (xhr.lengthComputable) {
-                setProgress(xhr.loaded / xhr.total);
-              }
-            },
-            (error) => {
-              console.error('Error loading central map:', error);
-              setShowLoadingBar(false);
-              handlePortfolioActivation();
+        setShowLoadingBar(true);
+        const gltfLoader = new GLTFLoader();
+        gltfLoader.load('/models/central.glb', 
+          () => {
+            setProgress(1);
+            setShowLoadingBar(false);
+            handlePortfolioActivation();
+          },
+          (xhr) => {
+            if (xhr.lengthComputable) {
+              setProgress(xhr.loaded / xhr.total);
             }
-          );
-        }, 1000);
+          },
+          (error) => {
+            console.error('Error loading central map:', error);
+            setShowLoadingBar(false);
+            handlePortfolioActivation();
+          }
+        );
       }
 
-      // Attempt to play the video
-      const playVideo = async () => {
-        try {
-          await video.play();
-          console.log('🎮 iOS/WebKit: Video playing successfully');
-        } catch (err) {
-          console.error('🎮 iOS/WebKit: Video play error:', err);
-        }
-      };
-
-      playVideo();
+      // Set up video if we have a ref
+      if (videoRef.current) {
+        const video = videoRef.current;
+        video.muted = true;
+        video.playsInline = true;
+        video.setAttribute('playsinline', '');
+        video.setAttribute('webkit-playsinline', '');
+        
+        // Try to play the video but don't wait for it
+        video.play().catch(console.error);
+      }
     }
   }, [shouldAutoLoad, isIntroVideo]);
 
-  // Enhanced iOS/WebKit touch handler - only used for non-intro videos
-  const handleIOSTouch = useCallback(async (e: React.TouchEvent) => {
-    if (!shouldAutoLoad) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-
-    if (shouldAutoLoad && !isIntroVideo && showIntroText) {
-      console.log('🎮 iOS/WebKit: Portfolio text touched');
-      
-      // Start loading the central map
+  // Remove video ready state dependency
+  useEffect(() => {
+    if (shouldAutoLoad) {
+      // Start loading immediately on mount
       setShowLoadingBar(true);
       const gltfLoader = new GLTFLoader();
       gltfLoader.load('/models/central.glb', 
@@ -608,7 +594,16 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
         }
       );
     }
-  }, [shouldAutoLoad, isIntroVideo, showIntroText]);
+  }, [shouldAutoLoad]);
+
+  // Remove iOS/WebKit touch handler since we don't need it anymore
+  const handleIOSTouch = useCallback(async (e: React.TouchEvent) => {
+    if (!shouldAutoLoad) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleIntroClick(e);
+    }
+  }, [shouldAutoLoad]);
 
   // Add specific touch event listener for portfolio text
   useEffect(() => {
@@ -635,7 +630,7 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
     <div 
       className="loading-screen" 
       style={{ 
-        pointerEvents: 'auto', 
+        pointerEvents: shouldAutoLoad ? 'none' : 'auto', 
         touchAction: 'manipulation',
         WebkitTouchCallout: 'none',
         WebkitUserSelect: 'none',
@@ -678,29 +673,25 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
         preload="auto"
         style={{ 
           pointerEvents: 'none',
-          opacity: isVideoReady ? 1 : 0,
-          visibility: isVideoReady ? 'visible' : 'hidden',
+          opacity: 1,
+          visibility: 'visible',
           objectFit: 'cover',
           width: '100%',
           height: '100%',
           touchAction: 'none'
         }}
-        onLoadedData={() => {
-          setIsVideoReady(true);
-          setShowLoadingGif(false);
-        }}
       />
 
-      {isIntroVideo && !preventSkip && (
+      {isIntroVideo && !preventSkip && !shouldAutoLoad && (
         <div 
           className="absolute inset-0 flex items-center justify-center"
           style={{ 
-            pointerEvents: shouldAutoLoad ? 'none' : 'auto', 
+            pointerEvents: 'auto', 
             touchAction: 'manipulation',
             zIndex: 20 
           }}
-          onClick={shouldAutoLoad ? undefined : handleIntroClick}
-          onTouchStart={shouldAutoLoad ? undefined : handleIOSTouch}
+          onClick={handleIntroClick}
+          onTouchStart={handleIOSTouch}
         >
           {showIntroText && (
             <motion.div 
@@ -722,18 +713,16 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
                 left: '50%',
                 top: '50%',
                 transform: 'translate(-50%, -50%)',
-                pointerEvents: shouldAutoLoad ? 'none' : 'auto',
+                pointerEvents: 'auto',
                 touchAction: 'manipulation',
                 zIndex: 1000,
                 WebkitTapHighlightColor: 'transparent'
               }}
-              onClick={shouldAutoLoad ? undefined : handleIntroClick}
+              onClick={handleIntroClick}
               onTouchStart={(e) => {
-                if (!shouldAutoLoad) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleIntroClick(e);
-                }
+                e.preventDefault();
+                e.stopPropagation();
+                handleIntroClick(e);
               }}
             >
               <div className="text-4xl">PORTFOLIO</div>
