@@ -795,6 +795,11 @@ export default function App() {
                          text-white text-2xl font-bytebounce bg-black/60 px-4 py-2 rounded-none
                          pointer-events-none z-[100005] animate-fade-in-out">
             Press 'M' to open map.
+            {navigator.userAgent.includes('Firefox') && (
+              <div className="text-sm mt-1 text-red-400">
+                Firefox mouse SUCKS, use a chromium based browser for best experience.
+              </div>
+            )}
           </div>
         )}
         

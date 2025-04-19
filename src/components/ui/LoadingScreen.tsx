@@ -410,31 +410,72 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
 
   // Centralized function to handle portfolio activation
   const handlePortfolioActivation = () => {
-    // Request pointer lock immediately for better UX
-    if (!document.pointerLockElement) {
-      const canvas = document.querySelector('canvas');
-      if (canvas) {
-        canvas.requestPointerLock();
-      }
-    }
-
-    // Delay the game transition by 1 second
-    setTimeout(() => {
-      onLoadComplete();
+    // For iOS, we'll skip pointer lock and handle it differently
+    if (isIOS) {
+      console.log('🎮 iOS: Portfolio activation started');
       
-      // Add a small forward movement after portfolio activation
+      // Ensure we have user interaction before proceeding
+      if (!hasIOSInteracted) {
+        console.log('🎮 iOS: Waiting for user interaction');
+        return;
+      }
+
+      // Start loading the central map
+      setShowLoadingBar(true);
+      const gltfLoader = new GLTFLoader();
+      
+      // Load the central map with enhanced error handling
+      gltfLoader.load('/models/central.glb', 
+        () => {
+          console.log('🎮 iOS: Central map loaded successfully');
+          setProgress(1);
+          setShowLoadingBar(false);
+          
+          // Small delay before transitioning to game
+          setTimeout(() => {
+            onLoadComplete();
+          }, 500);
+        },
+        (xhr) => {
+          if (xhr.lengthComputable) {
+            const progress = xhr.loaded / xhr.total;
+            setProgress(progress);
+            console.log(`🎮 iOS: Loading progress: ${(progress * 100).toFixed(2)}%`);
+          }
+        },
+        (error) => {
+          console.error('🎮 iOS: Error loading central map:', error);
+          setShowLoadingBar(false);
+          
+          // Even if loading fails, try to proceed to game
+          setTimeout(() => {
+            onLoadComplete();
+          }, 500);
+        }
+      );
+    } else {
+      // Original non-iOS behavior
+      if (!document.pointerLockElement) {
+        const canvas = document.querySelector('canvas');
+        if (canvas) {
+          canvas.requestPointerLock();
+        }
+      }
+
       setTimeout(() => {
-        // Simulate pressing W key for a brief moment
-        const forwardEvent = new KeyboardEvent('keydown', { code: 'KeyW' });
-        window.dispatchEvent(forwardEvent);
+        onLoadComplete();
         
-        // Release the key after 100ms for a small motion
         setTimeout(() => {
-          const forwardUpEvent = new KeyboardEvent('keyup', { code: 'KeyW' });
-          window.dispatchEvent(forwardUpEvent);
+          const forwardEvent = new KeyboardEvent('keydown', { code: 'KeyW' });
+          window.dispatchEvent(forwardEvent);
+          
+          setTimeout(() => {
+            const forwardUpEvent = new KeyboardEvent('keyup', { code: 'KeyW' });
+            window.dispatchEvent(forwardUpEvent);
+          }, 100);
         }, 100);
-      }, 100); // Small delay to ensure pointer lock is active
-    }, 1000); // 1 second delay before transitioning to game
+      }, 1000);
+    }
   };
 
   // Handle video transitions
@@ -540,17 +581,53 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
         }, 1000);
       }
 
-      // Attempt to play the video
+      // Enhanced video play attempt for iOS
       const playVideo = async () => {
         try {
+          // First attempt
           await video.play();
           console.log('🎮 iOS: Video playing successfully');
+          setIsIOSVideoPlaying(true);
         } catch (err) {
-          console.error('🎮 iOS: Video play error:', err);
+          console.error('🎮 iOS: First video play attempt failed:', err);
+          
+          // Second attempt with different approach
+          try {
+            video.currentTime = 0;
+            video.muted = true;
+            await video.play();
+            console.log('🎮 iOS: Video playing successfully on second attempt');
+            setIsIOSVideoPlaying(true);
+          } catch (err2) {
+            console.error('🎮 iOS: Second video play attempt failed:', err2);
+            // If both attempts fail, we'll let the user interaction handle it
+          }
         }
       };
 
+      // Initial play attempt
       playVideo();
+
+      // Add event listener for user interaction
+      const handleUserInteraction = async () => {
+        if (!isIOSVideoPlaying) {
+          try {
+            await video.play();
+            setIsIOSVideoPlaying(true);
+            setHasIOSInteracted(true);
+          } catch (err) {
+            console.error('🎮 iOS: Video play failed after user interaction:', err);
+          }
+        }
+      };
+
+      document.addEventListener('touchstart', handleUserInteraction, { once: true });
+      document.addEventListener('click', handleUserInteraction, { once: true });
+
+      return () => {
+        document.removeEventListener('touchstart', handleUserInteraction);
+        document.removeEventListener('click', handleUserInteraction);
+      };
     }
   }, [isIOS, isIntroVideo]);
 
