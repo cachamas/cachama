@@ -283,32 +283,6 @@ canvas {
       justify-content: center !important;
     }
   }
-
-  .loading-screen {
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: none;
-    touch-action: manipulation;
-  }
-
-  .loading-screen video {
-    -webkit-transform: translateZ(0);
-    transform: translateZ(0);
-    backface-visibility: hidden;
-    perspective: 1000;
-  }
-
-  .pixel-font {
-    -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
-    -webkit-user-drag: none;
-    user-drag: none;
-  }
-}
-
-/* Prevent double-tap zoom on iOS */
-* {
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
 }
 
 /* Remove outdated mobile controls CSS - now handled in MobileControls.tsx */

@@ -32,6 +32,8 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
   const loadStartTime = useRef<number | null>(null);
   const [showIOSContinue, setShowIOSContinue] = useState(false);
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+  const isWebKit = /AppleWebKit/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
+  const shouldAutoLoad = isIOS || isWebKit;
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [showLoadingGif, setShowLoadingGif] = useState(true);
   const [hasIOSInteracted, setHasIOSInteracted] = useState(false);
@@ -410,72 +412,31 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
 
   // Centralized function to handle portfolio activation
   const handlePortfolioActivation = () => {
-    // For iOS, we'll skip pointer lock and handle it differently
-    if (isIOS) {
-      console.log('🎮 iOS: Portfolio activation started');
-      
-      // Ensure we have user interaction before proceeding
-      if (!hasIOSInteracted) {
-        console.log('🎮 iOS: Waiting for user interaction');
-        return;
+    // Request pointer lock immediately for better UX
+    if (!document.pointerLockElement) {
+      const canvas = document.querySelector('canvas');
+      if (canvas) {
+        canvas.requestPointerLock();
       }
-
-      // Start loading the central map
-      setShowLoadingBar(true);
-      const gltfLoader = new GLTFLoader();
-      
-      // Load the central map with enhanced error handling
-      gltfLoader.load('/models/central.glb', 
-        () => {
-          console.log('🎮 iOS: Central map loaded successfully');
-          setProgress(1);
-          setShowLoadingBar(false);
-          
-          // Small delay before transitioning to game
-          setTimeout(() => {
-            onLoadComplete();
-          }, 500);
-        },
-        (xhr) => {
-          if (xhr.lengthComputable) {
-            const progress = xhr.loaded / xhr.total;
-            setProgress(progress);
-            console.log(`🎮 iOS: Loading progress: ${(progress * 100).toFixed(2)}%`);
-          }
-        },
-        (error) => {
-          console.error('🎮 iOS: Error loading central map:', error);
-          setShowLoadingBar(false);
-          
-          // Even if loading fails, try to proceed to game
-          setTimeout(() => {
-            onLoadComplete();
-          }, 500);
-        }
-      );
-    } else {
-      // Original non-iOS behavior
-      if (!document.pointerLockElement) {
-        const canvas = document.querySelector('canvas');
-        if (canvas) {
-          canvas.requestPointerLock();
-        }
-      }
-
-      setTimeout(() => {
-        onLoadComplete();
-        
-        setTimeout(() => {
-          const forwardEvent = new KeyboardEvent('keydown', { code: 'KeyW' });
-          window.dispatchEvent(forwardEvent);
-          
-          setTimeout(() => {
-            const forwardUpEvent = new KeyboardEvent('keyup', { code: 'KeyW' });
-            window.dispatchEvent(forwardUpEvent);
-          }, 100);
-        }, 100);
-      }, 1000);
     }
+
+    // Delay the game transition by 1 second
+    setTimeout(() => {
+      onLoadComplete();
+      
+      // Add a small forward movement after portfolio activation
+      setTimeout(() => {
+        // Simulate pressing W key for a brief moment
+        const forwardEvent = new KeyboardEvent('keydown', { code: 'KeyW' });
+        window.dispatchEvent(forwardEvent);
+        
+        // Release the key after 100ms for a small motion
+        setTimeout(() => {
+          const forwardUpEvent = new KeyboardEvent('keyup', { code: 'KeyW' });
+          window.dispatchEvent(forwardUpEvent);
+        }, 100);
+      }, 100); // Small delay to ensure pointer lock is active
+    }, 1000); // 1 second delay before transitioning to game
   };
 
   // Handle video transitions
@@ -564,83 +525,67 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
     }
   }, [isMuted, isIntroVideo]);
 
-  // Simplified iOS video initialization
+  // Simplified iOS/WebKit video initialization
   useEffect(() => {
-    if (videoRef.current && isIOS) {
+    if (videoRef.current && shouldAutoLoad) {
       const video = videoRef.current;
       video.muted = true;
       video.playsInline = true;
       video.setAttribute('playsinline', '');
       video.setAttribute('webkit-playsinline', '');
       
-      // Show intro text after a delay for iOS
+      // Show intro text after a delay for iOS/WebKit
       if (isIntroVideo) {
         setTimeout(() => {
           setShowIntroText(true);
           setShowLoadingGif(false);
+          
+          // Start loading automatically
+          setShowLoadingBar(true);
+          const gltfLoader = new GLTFLoader();
+          gltfLoader.load('/models/central.glb', 
+            () => {
+              setProgress(1);
+              setShowLoadingBar(false);
+              handlePortfolioActivation();
+            },
+            (xhr) => {
+              if (xhr.lengthComputable) {
+                setProgress(xhr.loaded / xhr.total);
+              }
+            },
+            (error) => {
+              console.error('Error loading central map:', error);
+              setShowLoadingBar(false);
+              handlePortfolioActivation();
+            }
+          );
         }, 1000);
       }
 
-      // Enhanced video play attempt for iOS
+      // Attempt to play the video
       const playVideo = async () => {
         try {
-          // First attempt
           await video.play();
-          console.log('🎮 iOS: Video playing successfully');
-          setIsIOSVideoPlaying(true);
+          console.log('🎮 iOS/WebKit: Video playing successfully');
         } catch (err) {
-          console.error('🎮 iOS: First video play attempt failed:', err);
-          
-          // Second attempt with different approach
-          try {
-            video.currentTime = 0;
-            video.muted = true;
-            await video.play();
-            console.log('🎮 iOS: Video playing successfully on second attempt');
-            setIsIOSVideoPlaying(true);
-          } catch (err2) {
-            console.error('🎮 iOS: Second video play attempt failed:', err2);
-            // If both attempts fail, we'll let the user interaction handle it
-          }
+          console.error('🎮 iOS/WebKit: Video play error:', err);
         }
       };
 
-      // Initial play attempt
       playVideo();
-
-      // Add event listener for user interaction
-      const handleUserInteraction = async () => {
-        if (!isIOSVideoPlaying) {
-          try {
-            await video.play();
-            setIsIOSVideoPlaying(true);
-            setHasIOSInteracted(true);
-          } catch (err) {
-            console.error('🎮 iOS: Video play failed after user interaction:', err);
-          }
-        }
-      };
-
-      document.addEventListener('touchstart', handleUserInteraction, { once: true });
-      document.addEventListener('click', handleUserInteraction, { once: true });
-
-      return () => {
-        document.removeEventListener('touchstart', handleUserInteraction);
-        document.removeEventListener('click', handleUserInteraction);
-      };
     }
-  }, [isIOS, isIntroVideo]);
+  }, [shouldAutoLoad, isIntroVideo]);
 
-  // Enhanced iOS touch handler
+  // Enhanced iOS/WebKit touch handler - only used for non-intro videos
   const handleIOSTouch = useCallback(async (e: React.TouchEvent) => {
-    // Don't prevent default on iOS to allow native behavior
-    if (!isIOS) {
+    if (!shouldAutoLoad) {
       e.preventDefault();
       e.stopPropagation();
     }
 
-    if (isIOS && isIntroVideo && showIntroText) {
-      console.log('🎮 iOS: Portfolio text touched');
+    if (shouldAutoLoad && !isIntroVideo && showIntroText) {
+      console.log('🎮 iOS/WebKit: Portfolio text touched');
       
       // Start loading the central map
       setShowLoadingBar(true);
@@ -663,7 +608,7 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
         }
       );
     }
-  }, [isIOS, isIntroVideo, showIntroText]);
+  }, [shouldAutoLoad, isIntroVideo, showIntroText]);
 
   // Add specific touch event listener for portfolio text
   useEffect(() => {
@@ -750,12 +695,12 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
         <div 
           className="absolute inset-0 flex items-center justify-center"
           style={{ 
-            pointerEvents: 'auto', 
+            pointerEvents: shouldAutoLoad ? 'none' : 'auto', 
             touchAction: 'manipulation',
             zIndex: 20 
           }}
-          onClick={isIOS ? undefined : handleIntroClick}
-          onTouchStart={isIOS ? handleIOSTouch : undefined}
+          onClick={shouldAutoLoad ? undefined : handleIntroClick}
+          onTouchStart={shouldAutoLoad ? undefined : handleIOSTouch}
         >
           {showIntroText && (
             <motion.div 
@@ -777,21 +722,18 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
                 left: '50%',
                 top: '50%',
                 transform: 'translate(-50%, -50%)',
-                pointerEvents: 'auto',
+                pointerEvents: shouldAutoLoad ? 'none' : 'auto',
                 touchAction: 'manipulation',
                 zIndex: 1000,
                 WebkitTapHighlightColor: 'transparent'
               }}
-              onClick={handleIntroClick}
+              onClick={shouldAutoLoad ? undefined : handleIntroClick}
               onTouchStart={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                handleIntroClick(e);
-              }}
-              onTouchEnd={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                handleIntroClick(e);
+                if (!shouldAutoLoad) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleIntroClick(e);
+                }
               }}
             >
               <div className="text-4xl">PORTFOLIO</div>
