@@ -479,9 +479,23 @@ export default function World({ ...props }: WorldProps) {
         // Ensure video is visible and plays immediately
         videoElement.style.opacity = '1';
         videoElement.style.visibility = 'visible';
-        videoElement.muted = false;
-        videoElement.volume = 1.0;
-        videoElement.play().catch(console.error);
+        
+        // For iOS/WebKit, always keep videos muted and ensure playsinline
+        if (isIOS || isWebKit) {
+          videoElement.muted = true;
+          videoElement.setAttribute('playsinline', '');
+          videoElement.setAttribute('webkit-playsinline', '');
+        } else {
+          videoElement.muted = false;
+          videoElement.volume = 1.0;
+        }
+        
+        // Try to play the video
+        videoElement.play().catch(err => {
+          console.error('Error playing video:', err);
+          // If video fails to play, continue with map transition anyway
+          handleMapChange(targetMap);
+        });
       }
       
       // SHORT DELAY before starting to load the map - gives video time to start playing

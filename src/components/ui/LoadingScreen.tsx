@@ -594,6 +594,70 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
     };
   }, [isIOS, isIntroVideo, showIntroText, preventSkip]);
 
+  // Initialize video for iOS/WebKit
+  useEffect(() => {
+    if (videoRef.current && shouldAutoLoad) {
+      const video = videoRef.current;
+      video.muted = true;
+      video.playsInline = true;
+      video.setAttribute('playsinline', '');
+      video.setAttribute('webkit-playsinline', '');
+      video.setAttribute('x5-playsinline', '');
+      video.setAttribute('x5-video-player-type', 'h5');
+      video.setAttribute('x5-video-player-fullscreen', 'false');
+      video.setAttribute('x5-video-orientation', 'portraint');
+      
+      // Try to play immediately
+      const playVideo = async () => {
+        try {
+          await video.play();
+          console.log('🎮 iOS/WebKit: Video playing successfully');
+          setIsIOSVideoPlaying(true);
+        } catch (err) {
+          console.error('🎮 iOS/WebKit: Video play error:', err);
+          // If video fails to play, just continue without it
+          handlePortfolioActivation();
+        }
+      };
+
+      playVideo();
+    }
+  }, [shouldAutoLoad, videoSrc]);
+
+  // Handle video transitions for iOS/WebKit
+  useEffect(() => {
+    if (shouldAutoLoad && videoRef.current) {
+      const video = videoRef.current;
+      
+      // Reset video state
+      video.currentTime = 0;
+      video.muted = true;
+      video.playsInline = true;
+      
+      // Try to play the video
+      const playVideo = async () => {
+        try {
+          await video.play();
+          console.log('🎮 iOS/WebKit: Transition video playing successfully');
+        } catch (err) {
+          console.error('🎮 iOS/WebKit: Transition video play error:', err);
+          // If video fails to play, just continue without it
+          handlePortfolioActivation();
+        }
+      };
+
+      playVideo();
+    }
+  }, [videoSrc, shouldAutoLoad]);
+
+  // Bypass loading sequence for iOS/WebKit
+  useEffect(() => {
+    if (shouldAutoLoad) {
+      console.log('🎮 iOS/WebKit detected - bypassing loading sequence');
+      handlePortfolioActivation();
+    }
+  }, [shouldAutoLoad]);
+
   return (
     <div 
       className="loading-screen" 
@@ -651,6 +715,21 @@ export function LoadingScreen({ videoSrc, onLoadComplete, isLoading, preventSkip
             touchAction: 'none'
           }}
         />
+      )}
+
+      {/* For iOS/WebKit, show a simple loading indicator during transitions */}
+      {shouldAutoLoad && isLoading && (
+        <div className="absolute inset-0 bg-black flex items-center justify-center">
+          <div className="text-white text-center">
+            <div className="text-2xl mb-4">Loading...</div>
+            <div className="w-64 h-2 bg-gray-700 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-white transition-all duration-300"
+                style={{ width: `${progress * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {!shouldAutoLoad && isIntroVideo && !preventSkip && (
